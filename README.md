@@ -10,9 +10,9 @@ Godot 4.7.2 / GDScript / Compatibility で作る、Windows x86_64 向けのオ�
 
 ## Windowsで遊ぶ
 
-M2の取得先と確認条件は [最新の進捗](docs/PROGRESS.md) を参照してください。GitHub の **Actions → Windows development build → 成功した実行 → Artifacts** から `PRIMORDIAL_SEA_Windows_M2_<commit>` を取得します。フォルダ全体を展開し、`PrimordialSea.exe` を起動してください。EXEとPCK・ライセンスを同じフォルダに保持します。
+[M2 Windows開発版をダウンロード](https://github.com/tsutchi30-lang/primordial-sea/actions/runs/38059702704/artifacts/11672747591)。実装 `0369240` / 検証merge `0758fbe5`、2026-10-17 14:31 UTCまで保存。GitHubへのログインが必要な場合があります。期限後はActionsの最新成功runまたは手動実行から取得できます。詳しい条件は [最新の進捗](docs/PROGRESS.md) を参照してください。フォルダ全体を展開し、`PrimordialSea.exe` を起動してください。EXEとPCK・ライセンスを同じフォルダに保持します。
 
-新海域の画面、二つの生態利用動画、経路の酸素記録、撮影条件は `PRIMORDIAL_SEA_M2_Evidence_<commit>` にまとめます。Windowsへのexportと、Windows OSで人が操作した検収は別です。実際の確認結果は [受入表](docs/M2_ACCEPTANCE.md) に記載します。
+[新海域の画面・二つの生態利用動画・経路の酸素記録・撮影条件](https://github.com/tsutchi30-lang/primordial-sea/actions/runs/38059702704/artifacts/11672403942) は `PRIMORDIAL_SEA_M2_Evidence_0758fbe5` に含みます（2026-10-17 14:39 UTCまで）。Windowsへのexportと、Windows OSで人が操作した検収は別です。実際の確認結果は [受入表](docs/M2_ACCEPTANCE.md) に記載します。
 
 | 操作 | キー |
 |---|---|
