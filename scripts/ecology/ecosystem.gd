@@ -8,10 +8,20 @@ const Hogara = preload("res://scripts/creatures/hogara.gd")
 const Predator = preload("res://scripts/creatures/windoweater.gd")
 const Silt = preload("res://scripts/ecology/silt_cloud.gd")
 const Art = preload("res://scripts/creatures/creature_mesh.gd")
+const Plains = preload("res://scripts/ecology/plains_ecology.gd")
+const Graveyard = preload("res://scripts/ecology/graveyard_ecology.gd")
+const Palaeo = preload("res://scripts/ecology/palaeo_ecology.gd")
 signal player_hit(amount: float)
 signal hint(text: String)
 signal observed_event(species_id: String, event_id: String)
 signal footfall(at: Vector3, strength: float)
+signal resource_drop(kind: String, at: Vector3, source_id: String)
+signal resonance(at: Vector3, strength: float)
+signal defense_rattle(at: Vector3)
+signal behavior_observed(creature: Node3D, event_id: String)
+var plains: Node3D
+var graveyard: Node3D
+var palaeo: Node3D
 var player: CharacterBody3D
 var world: Node3D
 var creatures: Array[Node3D] = []
@@ -109,6 +119,21 @@ func _spawn() -> void:
 	predator.event_started.connect(func(event_id: String): observed_event.emit("windoweater", event_id))
 	predators.append(predator)
 	creatures.append(predator)
+	plains = Plains.new()
+	add_child(plains)
+	plains.resource_drop.connect(func(kind: String, at: Vector3, source_id: String): resource_drop.emit(kind, at, source_id))
+	plains.hint.connect(func(message: String): hint.emit(message))
+	plains.observed_event.connect(func(species_id: String, event_id: String): observed_event.emit(species_id, event_id))
+	plains.setup(self)
+	graveyard = Graveyard.new()
+	add_child(graveyard)
+	graveyard.resonance.connect(func(at: Vector3, strength: float): resonance.emit(at, strength))
+	graveyard.defense_rattle.connect(func(at: Vector3): defense_rattle.emit(at))
+	graveyard.behavior_observed.connect(func(creature: Node3D, event_id: String): behavior_observed.emit(creature, event_id))
+	graveyard.setup(self)
+	palaeo = Palaeo.new()
+	add_child(palaeo)
+	palaeo.setup(self)
 	set_low_particles(low_particles)
 
 func tick(delta: float) -> void:
@@ -140,6 +165,10 @@ func tick(delta: float) -> void:
 		var lure: Variant = nearest_bait(school.global_position)
 		school.tick(delta, lure, large_positions, hogara, i == schools.size() - 1, player.global_position)
 	hogara.tick(delta, player, schools.back().global_position)
+	plains.tick(delta)
+	player.external_speed_scale = plains.player_speed_scale()
+	graveyard.tick(delta)
+	palaeo.tick(delta)
 	for predator in predators:
 		predator.tick(delta)
 	for creature in creatures:
@@ -264,6 +293,8 @@ func get_observation_target(camera: Camera3D) -> Node3D:
 	var nearest: Node3D = null
 	var best_score: float = -1.0
 	for creature in creatures:
+		if creature.has_method("is_observable") and not creature.is_observable():
+			continue
 		var target: Vector3 = creature.observation_position()
 		var offset := target - camera.global_position
 		var distance := offset.length()
@@ -275,6 +306,8 @@ func get_observation_target(camera: Camera3D) -> Node3D:
 		# A transparent predator remains an ordinary visual target; scanning never
 		# reveals every hidden predator or records behaviour behind terrain.
 		var target_bodies: Array[RID] = []
+		if creature is CollisionObject3D:
+			target_bodies.append(creature.get_rid())
 		if creature == hogara:
 			# The focus point lies inside the thick shell. Ignore only this target's
 			# own anatomy; terrain still occludes observation, and predator/shelter

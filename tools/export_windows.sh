@@ -7,6 +7,8 @@ tools/verify.sh
 output_dir="$repo_root/build/windows"
 mkdir -p "$output_dir"
 rm -f "$output_dir/PrimordialSea.exe" "$output_dir/PrimordialSea.pck" "$output_dir/BUILD_INFO.txt"
+# Remove only generated M1.5 package notes that would misidentify a new M2 export.
+rm -f "$output_dir/REVIEW_DOCS_INFO.json" "$output_dir/VISUAL_REVIEW_M1_5.md"
 if timeout --signal=TERM --kill-after=10 240 tools/godot.sh --headless --path "$repo_root" \
   --export-release 'Windows Desktop' "$output_dir/PrimordialSea.exe" > build/logs/export.log 2>&1; then
   cat build/logs/export.log
@@ -37,7 +39,7 @@ PY
 mkdir -p "$output_dir/licenses"
 cp assets/licenses/*.txt "$output_dir/licenses/"
 cp docs/PLAYTEST.md "$output_dir/PLAYTEST_日本語.md"
-for doc in VISUAL_REVIEW_M1_5.md ART_DIRECTION.md ASSET_PIPELINE.md; do
+for doc in M2_IMPLEMENTATION.md M2_ACCEPTANCE.md SAVE_MIGRATION.md QUALITY_BACKLOG.md BUILD_AND_TEST.md PROGRESS.md ART_DIRECTION.md ASSET_PIPELINE.md; do
   if [[ -f "docs/$doc" ]]; then cp "docs/$doc" "$output_dir/$doc"; fi
 done
 cp build/logs/VERIFIED.txt "$output_dir/VERIFICATION.txt"
@@ -46,15 +48,17 @@ WINDOWS_EXPORT_OK: PE executable and separate PCK verified.
 This is an export check, not a Windows device playtest.
 TXT
 cat > "$output_dir/はじめに.txt" <<'TXT'
-原初の海 — 航法復旧編 / M1.5 見た目改善版 / Windows x86_64
+原初の海 — 航法復旧・装置安定化編 / M2 / Windows x86_64
 
 展開したフォルダから PrimordialSea.exe を起動してください。
 PrimordialSea.pck と licenses フォルダを同じ場所に残してください。
 オフラインで動作します。Godot の別途インストールは不要です。
 
 目標: 浅瀬で金属片2個、艇の残骸で航法ユニットを回収し、ポッドで航法を復旧。
-本開発版は「航法復旧編」まで。全編の帰還は今後の範囲です。
-今回の改善: 浅瀬から東の帆殻獣へ近づき、殻と三本脚を観察し、腹側で並走。
+航法復旧後: 回廊の先の白濁の平原と殻の墓場で、2点の精密部品を回収。
+粘糸と捕食者、共鳴壺と六面這いの習性を読み、中継で補給してポッドへ帰投。
+制振フレームと位相調整器を保管し、端末で装置を安定化します。
+安定化後も探索できます。全編の帰還と帰還コアは今後の範囲です。
 
 WASD:泳ぐ / Space:上昇 / C:下降 / Shift:加速 / マウス:視点
 E:調べる・拾う / 左クリック:道具 / Q:緊急パルス / F:ライト
@@ -64,6 +68,10 @@ E:調べる・拾う / 左クリック:道具 / Q:緊急パルス / F:ライト
 ポッドで補給・保管・保存。水中で終了すると最後の保存点へ戻ります。
 保存: %APPDATA%\PrimordialSea\
 設定と進行はゲームの保存フォルダ内で別々に管理されます。
+M1/M1.5の保存は「続きから」で読み、航法復旧済みならM2の目標へ進めます。
+旧schema 1は初回移行保存前に退避します。詳しくは SAVE_MIGRATION.md。
+既存進行を続ける場合「新しく始める」を選ばないでください。
+中継は酸素とスーツの補給のみ。携行品の保管・保存はポッドで行います。
 
 日本語表示・マウス・Alt+Tab・音のWindows実機確認手順は PLAYTEST_日本語.md。
 確認範囲は VERIFICATION.txt、エンジンとソース情報は BUILD_INFO.txt。
@@ -77,8 +85,8 @@ if git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
   if [[ -z "$dirty" ]]; then source_state=clean; else source_state='has local changes (development build)'; fi
 fi
 {
-  echo 'Game: Primordial Sea / 原初の海 航法復旧編'
-  echo 'Game version: 0.1.5-m1.5'
+  echo 'Game: Primordial Sea / 原初の海 航法復旧・装置安定化編'
+  printf 'Game version: %s\n' "$(sed -n 's/^config\/version="\(.*\)"/\1/p' project.godot)"
   printf 'Godot: %s\n' "$(tools/godot.sh --version)"
   printf 'Implementation branch head: %s\n' "${PRIMORDIAL_SOURCE_COMMIT:-$commit}"
   printf 'Build checkout commit (may be PR merge commit): %s\n' "$commit"

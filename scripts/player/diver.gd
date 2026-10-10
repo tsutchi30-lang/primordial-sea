@@ -1,6 +1,7 @@
 extends CharacterBody3D
 
 const Controls = preload("res://scripts/player/controls.gd")
+const WorldMap = preload("res://data/biomes/world_map.gd")
 var camera: Camera3D
 var lamp: SpotLight3D
 var active := false
@@ -14,6 +15,7 @@ var base_fov := 80.0
 var camera_shake := 0.25
 var zoom_fov := 80.0
 var impulse := Vector3.ZERO
+var external_speed_scale := 1.0
 
 func _ready() -> void:
 	collision_layer = 2
@@ -26,7 +28,7 @@ func _ready() -> void:
 	add_child(shape)
 	camera = Camera3D.new()
 	camera.near = 0.015
-	camera.far = 260.0
+	camera.far = WorldMap.CAMERA_FAR
 	camera.fov = base_fov
 	add_child(camera)
 	camera.make_current()
@@ -57,12 +59,11 @@ func _physics_process(delta: float) -> void:
 	direction = direction.limit_length(1.0)
 	sprinting = Input.is_action_pressed("sprint") and direction.length_squared() > 0.01
 	var speed := (4.5 if sprinting else 2.8) if not in_pod else 2.0
-	var desired := direction * speed
+	var desired := direction * speed * clampf(external_speed_scale, 0.1, 1.0)
 	if not in_pod:
 		# The peripheral current strengthens gradually and never teleports the diver.
 		# It is a velocity field, not an increment per frame.
-		desired.x += -signf(position.x) * maxf(0, absf(position.x) - 108) * 0.55
-		desired.z += -maxf(0, position.z - 32) * 0.55 + maxf(0, -174 - position.z) * 0.55
+		desired += WorldMap.current_at(global_position)
 	velocity = velocity.move_toward(desired, delta * 9.0)
 	if not in_pod:
 		if position.y > 0.8:
@@ -88,6 +89,7 @@ func clear_input() -> void:
 
 func relocate(at: Vector3, pod: bool) -> void:
 	clear_input()
+	external_speed_scale = 1.0
 	global_position = at
 	in_pod = pod
 	rotation = Vector3.ZERO

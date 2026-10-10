@@ -440,7 +440,7 @@ func test_scene_progression() -> void:
 	check(game.state.nav == "stored" and game.state.stored_metal == 2 and not game.nav_unit.visible, "banked unit survives death without duplication")
 	game.repair_navigation()
 	check(game.state.nav == "repaired" and game.state.stored_metal == 0, "pod repair reaches M1 completion")
-	check("航法復旧編" in game.state.objective(), "completion identifies the current chapter")
+	check("制振フレーム" in game.state.objective(), "navigation completion advances to the M2 part objective")
 	game.load_game()
 	check(game.state.nav == "repaired" and game.player.in_pod, "completed chapter reloads in pod")
 	game.repair_navigation()
@@ -541,7 +541,7 @@ func test_ecology() -> void:
 	var species := {}
 	for item in game.ecology.creatures:
 		species[item.species_id] = true
-	check(species.size() == 7, "exactly seven M1 species have active scene instances")
+	check(species.size() == 14, "all seven M1 species and seven M2 species have active scene instances")
 	for id in ["opabinia", "hallucigenia", "olenoides", "glowgrain", "mudunraveler", "hogara", "windoweater"]:
 		check(species.has(id), "M1 species is present: " + id)
 	# Manual fixed simulation steps exercise the production ecosystem at useful

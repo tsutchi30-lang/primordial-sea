@@ -3,6 +3,8 @@ extends CanvasLayer
 signal action_requested(action: String)
 signal setting_changed(key: String, value: Variant)
 const Controls = preload("res://scripts/player/controls.gd")
+const Map = preload("res://data/biomes/world_map.gd")
+const Items = preload("res://data/items/item_catalog.gd")
 const INK := Color("071d25")
 const PAPER := Color("deece8")
 const AQUA := Color("8ce0d2")
@@ -23,6 +25,7 @@ var direction_label: Label
 var observation_label: Label
 var marker_labels: Array[Label] = []
 var page := "title"
+var scroll: ScrollContainer
 
 func _ready() -> void:
 	layer = 10
@@ -112,7 +115,7 @@ func _ready() -> void:
 	observation_label.offset_bottom = 80
 	observation_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	hud.add_child(observation_label)
-	for i in 5:
+	for i in 9:
 		var marker := label("", 16, AQUA if i == 0 else GOLD)
 		marker.size = Vector2(230, 26)
 		marker.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
@@ -134,7 +137,7 @@ func _ready() -> void:
 	for side in ["left", "right", "top", "bottom"]:
 		margin.add_theme_constant_override("margin_" + side, 28)
 	panel.add_child(margin)
-	var scroll := ScrollContainer.new()
+	scroll = ScrollContainer.new()
 	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
 	margin.add_child(scroll)
 	menu_box = VBoxContainer.new()
@@ -180,6 +183,7 @@ func make_bar(color: Color, y: int) -> ProgressBar:
 	return bar
 
 func show_panel(new_page: String, title: String, body: String, buttons: Array) -> void:
+	scroll.scroll_vertical = 0
 	page = new_page
 	menu_box.add_theme_constant_override("separation", 13)
 	for child in menu_box.get_children():
@@ -187,7 +191,7 @@ func show_panel(new_page: String, title: String, body: String, buttons: Array) -
 		child.queue_free()
 	overlay.show()
 	panel.show()
-	var eyebrow := label("P R I M O R D I A L   S E A   /   航法復旧編", 14, GOLD)
+	var eyebrow := label("P R I M O R D I A L   S E A   /   装置安定化編", 14, GOLD)
 	menu_box.add_child(eyebrow)
 	menu_box.add_child(label(title, 38 if new_page == "title" else 28, PAPER))
 	var body_label := label(body, 18, PAPER)
@@ -200,6 +204,7 @@ func show_panel(new_page: String, title: String, body: String, buttons: Array) -
 func add_button(text: String, action: String, disabled := false) -> Button:
 	var button := Button.new()
 	button.text = text
+	button.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	button.custom_minimum_size.y = 44
 	button.disabled = disabled
 	button.pressed.connect(func(): action_requested.emit(action))
@@ -247,9 +252,9 @@ func update_game(game) -> void:
 	if game.selected_tool == 2:
 		tool_label.text = "誘餌ポッド  残り %d　/　持続 45 秒\n" % game.state.bait + tool_label.text.get_slice("\n", 1)
 	if game.selected_tool == 4:
-		tool_label.text = "目印ブイ  %d / 3 設置済み\n" % game.state.buoys.size() + tool_label.text.get_slice("\n", 1)
+		tool_label.text = "目印ブイ  %d / 6 設置済み\n" % game.state.buoys.size() + tool_label.text.get_slice("\n", 1)
 	var pod_distance: float = game.player.global_position.distance_to(Vector3(0, -2, -5))
-	direction_label.text = "光の浅棚" if game.player.position.z > -60 else "海綿の回廊"
+	direction_label.text = Map.name_at(game.player.position)
 	if not game.player.in_pod:
 		direction_label.text += "\n深度 %d m　ポッド直線 %d m" % [maxi(0, -int(game.player.position.y)), pod_distance]
 	hint_label.text = game.interaction_hint()
@@ -260,6 +265,8 @@ func update_game(game) -> void:
 		observation_label.text = ""
 	elif oxygen <= 0 and not game.player.in_pod and not game.player.breathing_air:
 		observation_label.text = "酸素切れ — 浮上してください！ 残り %.1f 秒" % game.state.anoxia_remaining()
+	elif game.cut_progress > 0:
+		observation_label.text = "粘糸を切断中  %d %%" % mini(100, int(game.cut_progress * 100))
 	else:
 		observation_label.text = "観察中  %d %%" % mini(100, int(game.observe_time / 2.3 * 100)) if game.observe_time > 0 else ""
 	update_markers(game)
@@ -268,20 +275,46 @@ func update_markers(game) -> void:
 	var points: Array = [[Vector3(0, 0, -4), "ポッド"]]
 	if game.state.nav == "wreck":
 		points.append([Vector3(0, -36, -130), "艇の信号"])
+	if game.state.nav == "repaired":
+		points.append([game.m2.relay_position(), "中継補給点"])
+		var part: String = game.m2.target_part()
+		if not part.is_empty():
+			points.append([Map.point(part, game.world), Items.item_name(part)])
 	for i in game.state.buoys.size():
 		var xyz: Array = game.state.buoys[i]
 		points.append([Vector3(xyz[0], xyz[1], xyz[2]), "目印 %d" % (i + 1)])
 	var view: Vector2 = root.size
+	var occupied: Array[Rect2] = []
 	for i in marker_labels.size():
 		var marker := marker_labels[i]
 		marker.visible = not game.player.in_pod and i < points.size()
 		if not marker.visible:
 			continue
 		var point: Vector3 = points[i][0]
-		var screen: Vector2 = game.player.camera.unproject_position(point)
-		var behind: bool = game.player.camera.is_position_behind(point)
-		if behind:
-			screen.x = 38 if screen.x > view.x * 0.5 else view.x - 240
-			screen.y = view.y * 0.45
-		marker.position = Vector2(clampf(screen.x - 115, 12, view.x - 242), clampf(screen.y, 210, view.y - 215))
+		var local: Vector3 = game.player.camera.to_local(point)
+		var behind: bool = local.z >= -game.player.camera.near
+		# A newly placed buoy may be exactly on the camera plane. Projection at
+		# z=0 divides by zero, so route near/behind signals to the edge first.
+		var screen := Vector2(view.x - 127 if local.x > 0 else 129, view.y * 0.45)
+		if not behind:
+			screen = game.player.camera.unproject_position(point)
+		var position := Vector2(clampf(screen.x - 115, 12, view.x - 242), clampf(screen.y, 210, view.y - 215))
+		# Keep the centre free for creature observation and separate nearby labels.
+		var aim := Rect2(view * 0.5 - Vector2(160, 90), Vector2(320, 180))
+		if aim.intersects(Rect2(position, marker.size)):
+			position.x = 14 if screen.x < view.x * 0.5 else view.x - 244
+		for attempt in 10:
+			var overlaps := false
+			for rect in occupied:
+				if rect.intersects(Rect2(position, marker.size)):
+					overlaps = true
+					break
+			if not overlaps:
+				break
+			position.y += 29
+			if position.y > view.y - 215:
+				position.y = 210
+				position.x = 14 if position.x > view.x * 0.5 else view.x - 244
+		marker.position = position
+		occupied.append(Rect2(position, marker.size))
 		marker.text = ("◀ " if behind else "◇ ") + points[i][1] + "  %d m" % game.player.global_position.distance_to(point)

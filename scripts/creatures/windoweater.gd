@@ -30,6 +30,10 @@ var mouth: Node3D
 var ecology: Node3D
 var player: CharacterBody3D
 var rng := RandomNumberGenerator.new()
+var web_field: Node3D
+var snared_web: Node3D
+var snare_cooldown := 0.0
+var snare_count := 0
 
 func setup(manager: Node3D, observer: CharacterBody3D, points: Array[Vector3]) -> void:
 	ecology = manager
@@ -59,18 +63,22 @@ func reveal(seconds: float = 8.0) -> void:
 		event_started.emit("silt")
 
 func stun() -> void:
+	_release_web()
 	_enter("stunned")
 	behavior_event = "stunned"
 	event_started.emit("stunned")
 
 func tick(delta: float) -> void:
+	if delta <= 0.0 or get_tree().paused:
+		return
 	age += delta
 	state_time += delta
 	exposed_remaining = maxf(0.0, exposed_remaining - delta)
 	bait_cooldown = maxf(0.0, bait_cooldown - delta)
+	snare_cooldown = maxf(0.0, snare_cooldown - delta)
 	if pursuing_player:
 		pursuit_time += delta
-		if (pursuit_time >= 12.0 or global_position.distance_to(home) >= 25.0) and state != "return" and state != "stunned":
+		if (pursuit_time >= 12.0 or global_position.distance_to(home) >= 25.0) and state not in ["return", "stunned", "snared"]:
 			_begin_return()
 	var player_distance := global_position.distance_to(player.global_position)
 	var shelter: bool = ecology.is_sheltered(player.global_position)
@@ -114,8 +122,12 @@ func tick(delta: float) -> void:
 				_enter("dash")
 		"dash":
 			var motion := dash_direction * delta * 6.0
+			var before := global_position
 			var collision := move_and_collide(motion)
 			dash_distance += motion.length()
+			if _contact_web(before):
+				_update_visual(delta)
+				return
 			if not attack_hit and not shelter and global_position.distance_to(player.global_position) < 1.0:
 				if ecology.has_clear_path(global_position, player.global_position):
 					attack_hit = true
@@ -129,11 +141,17 @@ func tick(delta: float) -> void:
 			# Last seen position is finite; no wall-following of the player's live position.
 			if state_time < 1.5 and not shelter:
 				_swim_toward(last_seen, 0.7, delta)
+				if state == "snared":
+					_update_visual(delta)
+					return
 			if state_time > 2.5:
 				_begin_return()
 		"return":
 			behavior_event = "return"
 			_swim_toward(home, 1.9, delta)
+			if state == "snared":
+				_update_visual(delta)
+				return
 			if global_position.distance_to(home) < 0.45:
 				pursuing_player = false
 				pursuit_time = 0.0
@@ -143,6 +161,9 @@ func tick(delta: float) -> void:
 			behavior_event = "feed"
 			if is_instance_valid(target_school):
 				_swim_toward(target_school.global_position, 1.8, delta)
+				if state == "snared":
+					_update_visual(delta)
+					return
 				if global_position.distance_to(target_school.global_position) < 1.7 and state_time > 1.0:
 					if bool(target_school.get("following_bait")):
 						bait_feeds += 1
@@ -161,7 +182,33 @@ func tick(delta: float) -> void:
 			behavior_event = "stunned"
 			if state_time >= 2.0:
 				_begin_return()
+		"snared":
+			behavior_event = "predator_snared"
+			# The original chase clock continues above; being caught never grants
+			# another attack window. One bounded entanglement then actual retreat.
+			if state_time >= 3.5:
+				_release_web()
+				_begin_return()
 	_update_visual(delta)
+
+func _contact_web(from: Vector3) -> bool:
+	if not is_instance_valid(web_field) or snare_cooldown > 0.0 or state == "snared":
+		return false
+	var touched: Node3D = web_field.contact_web(from, global_position, 0.7)
+	if not is_instance_valid(touched):
+		return false
+	snared_web = touched
+	snare_count += 1
+	_enter("snared")
+	behavior_event = "predator_snared"
+	event_started.emit("predator_snared")
+	return true
+
+func _release_web() -> void:
+	if is_instance_valid(snared_web):
+		snared_web.sever("predator")
+	snared_web = null
+	snare_cooldown = 4.0
 
 func _enter(next: String) -> void:
 	state = next
@@ -184,12 +231,14 @@ func _swim_toward(target: Vector3, speed: float, delta: float) -> void:
 	var direction := target - global_position
 	if direction.length() < 0.1:
 		return
+	var before := global_position
 	var collision := move_and_collide(direction.normalized() * minf(direction.length(), speed * delta))
 	if collision:
 		# Move around local rocks using a tangential trial. Never teleport or pursue
 		# through a shelter; blocked feeding/search simply expires on its timer.
 		var tangent := direction.slide(collision.get_normal()).normalized()
 		move_and_collide(tangent * speed * delta * 0.7)
+	_contact_web(before)
 
 func _build_model() -> void:
 	membrane_material = Art.material(Color(0.52, 0.80, 0.82, 0.085), 0.0, true)
@@ -235,10 +284,11 @@ func _build_model() -> void:
 func _update_visual(delta: float) -> void:
 	var exposed := exposed_remaining > 0.0
 	membrane_material.albedo_color = Color(0.72, 0.68, 0.48, 0.48) if exposed else Color(0.52, 0.80, 0.82, 0.085)
-	edge_material.albedo_color.a = 0.95 if exposed else 0.26
+	edge_material.albedo_color.a = 0.95 if exposed else 0.72 if state == "snared" else 0.26
 	var folded := state in ["windup", "dash", "recover", "feed"]
 	for i in wings.size():
-		wings[i].rotation.x = lerpf(wings[i].rotation.x, -0.95 if folded else sin(age * 1.4 + i) * 0.055, minf(delta * 5.0, 1.0))
-	mouth.scale = Vector3.ONE * (1.0 + sin(age * 4.0) * (0.055 if folded else 0.005))
+		var desired := (-0.65 if i % 2 == 0 else 0.35) + sin(age * 7.0 + i) * 0.04 if state == "snared" else -0.95 if folded else sin(age * 1.4 + i) * 0.055
+		wings[i].rotation.x = lerpf(wings[i].rotation.x, desired, minf(delta * 5.0, 1.0))
+	mouth.scale = Vector3(0.72, 1.13, 0.8) if state == "snared" else Vector3.ONE * (1.0 + sin(age * 4.0) * (0.055 if folded else 0.005))
 	for particle in coating:
 		particle.visible = exposed

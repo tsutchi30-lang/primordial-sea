@@ -2,9 +2,13 @@
 set -euo pipefail
 repo_root="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$repo_root"
-mkdir -p build/logs
+mkdir -p build/logs build/m2/routes
 touch build/.gdignore
 rm -f build/logs/VERIFIED.txt
+for stage in import smoke hogara-gait save-migration m2-flow m2-interface plains-ecology graveyard-ecology palaeo-ecology m2-world pod-route m2-routes export; do
+  rm -f "build/logs/$stage.log"
+done
+rm -f build/m2/routes/routes-manifest.json build/m2/routes/evidence.json
 tools/bootstrap.sh
 python3 tools/generate_assets.py
 
@@ -25,24 +29,37 @@ run_checked() {
   fi
 }
 run_checked import 180 tools/godot.sh --headless --path "$repo_root" --editor --import
-run_checked smoke "${VERIFY_TIMEOUT_SECONDS:-180}" tools/godot.sh --headless --path "$repo_root" --script res://tests/smoke_test.gd
-if ! grep -Eq '^SMOKE_OK([[:space:]:]|$)' build/logs/smoke.log; then
-  echo 'VERIFY_FAILED: smoke test did not emit SMOKE_OK' >&2; exit 1
-fi
-run_checked hogara-gait 150 tools/godot.sh --headless --path "$repo_root" --script res://tests/hogara_gait_test.gd
-if ! grep -Eq '^HOGARA_GAIT_OK ' build/logs/hogara-gait.log; then
-  echo 'VERIFY_FAILED: articulated gait and shelter checks did not pass' >&2; exit 1
-fi
+run_test() {
+  local stage="$1" duration="$2" script="$3" marker="$4"
+  run_checked "$stage" "$duration" tools/godot.sh --headless --path "$repo_root" --script "$script"
+  if ! grep -Eq "^${marker}([[:space:]:]|$)" "build/logs/$stage.log"; then
+    echo "VERIFY_FAILED: $stage did not emit $marker" >&2; exit 1
+  fi
+}
+run_test smoke "${VERIFY_TIMEOUT_SECONDS:-180}" res://tests/smoke_test.gd SMOKE_OK
+run_test hogara-gait 150 res://tests/hogara_gait_test.gd HOGARA_GAIT_OK
+run_test save-migration 60 res://tests/save_migration_test.gd SAVE_MIGRATION_OK
+run_test m2-flow 180 res://tests/m2_flow_test.gd M2_FLOW_OK
+run_test m2-interface 120 res://tests/m2_interface_test.gd M2_INTERFACE_OK
+run_test plains-ecology 90 res://tests/plains_ecology_test.gd PLAINS_ECOLOGY_OK
+run_test graveyard-ecology 120 res://tests/graveyard_ecology_test.gd GRAVEYARD_ECOLOGY_OK
+run_test palaeo-ecology 90 res://tests/palaeo_ecology_test.gd PALAEO_OK
+run_test m2-world 120 res://tests/m2_world_test.gd M2_WORLD_OK
 source_commit="${PRIMORDIAL_SOURCE_COMMIT:-$(git rev-parse HEAD 2>/dev/null || echo source-archive)}"
 run_checked pod-route 120 tools/godot.sh --headless --path "$repo_root" --fixed-fps 60 --script res://tools/capture_encounter.gd -- --mode pod-route --output "$repo_root/build/m1-5/reach" --source-commit "$source_commit"
 if ! grep -Eq '^REPLAY_OK ' build/logs/pod-route.log; then
   echo 'VERIFY_FAILED: pod-to-encounter input replay did not pass' >&2; exit 1
 fi
 python3 tools/write_evidence_manifest.py "$repo_root/build/m1-5/reach"
+run_checked m2-routes 600 tools/godot.sh --headless --path "$repo_root" --fixed-fps 60 --script res://tests/m2_routes_test.gd -- --output "$repo_root/build/m2/routes" --source-commit "$source_commit"
+if ! grep -Eq '^M2_ROUTES_OK ' build/logs/m2-routes.log; then
+  echo 'VERIFY_FAILED: M2 input routes did not pass' >&2; exit 1
+fi
+python3 tools/write_evidence_manifest.py "$repo_root/build/m2/routes"
 {
-  echo "IMPORT_SMOKE_GAIT_AND_POD_ROUTE_OK"
+  echo "IMPORT_M1_GAIT_M2_SAVE_FLOW_ECOLOGY_AND_ROUTES_OK"
   date -u '+UTC=%Y-%m-%dT%H:%M:%SZ'
   tools/godot.sh --version
   echo 'Windows hardware/audio/manual controls remain separate checks; see docs/PLAYTEST.md.'
 } > build/logs/VERIFIED.txt
-echo 'VERIFY_OK: import, gameplay smoke, articulated gait and live pod-to-encounter input replay; logs in build/logs/'
+echo 'VERIFY_OK: import, M1 gameplay/gait, M2 saves/flow/ecology and live input routes; logs in build/logs/'

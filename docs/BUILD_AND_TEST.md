@@ -33,15 +33,15 @@ tools/godot.sh --version
 tools/verify.sh
 ```
 
-`bootstrap → 決定的な音の生成 → Godot import → 本編を使う smoke test → 接地・休息・通行試験 → ポッドから遭遇区間への入力再生` を順に実行します。個別の smoke 呼出しは次の通りです。
+`bootstrap → 決定的な音の生成 → Godot import → M1 smoke・ホガラ歩容 → 旧セーブ移行 → M2本編進行・各生態・地形 → M1遭遇とM2往復の実Input再生` を順に実行します。個別の smoke 呼出しは次の通りです。
 
 ```bash
 tools/godot.sh --headless --path . --script res://tests/smoke_test.gd
 ```
 
-各工程は timeout、終了コード、Godot の `SCRIPT ERROR` / `ERROR` / assertion を検査し、試験は `SMOKE_OK` の明示も必要です。失敗時は工程名とログを出し、export と配布候補 artifact を成功扱いにしません。import は180秒、smoke は既定180秒、ホガラ接地・通行試験は150秒、ポッドからの入力再生は120秒、export は240秒。smoke の時間制限のみ `VERIFY_TIMEOUT_SECONDS` で変更できます。
+各工程は timeout、終了コード、Godot の `SCRIPT ERROR` / `ERROR` / assertion を検査し、各試験固有の成功マーカーも必要です。失敗時は工程名とログを出し、export と配布候補 artifact を成功扱いにしません。import は180秒、smoke は既定180秒、ホガラは150秒、旧セーブ移行60秒、M2 flow180秒、平原・古生物90秒、墓場・地形・M2 UI120秒、M1ポッド入力再生120秒、M2経路600秒、export240秒。smoke の時間制限のみ `VERIFY_TIMEOUT_SECONDS` で変更できます。
 
-ログは `build/logs/import.log`、`smoke.log`、成功記録は `VERIFIED.txt`。自動試験では通常のプレイ進行を使わず、専用の保存先を使います。生成音は Python 標準ライブラリだけで10本のPCM WAVを再生成し、音源サンプルや有料APIに依存しません。日本語の Noto Sans CJK フォントはリポジトリに同梱し、出所と公式ファイルとのハッシュ一致を `assets/licenses/SOURCES.txt` に記録しています。
+ログは `build/logs/import.log`、`smoke.log`、成功記録は `VERIFIED.txt`。自動試験では通常のプレイ進行を使わず、専用の保存先を使います。生成音は Python 標準ライブラリだけで必要なPCM WAVを再生成し、音源サンプルや有料APIに依存しません。日本語の Noto Sans CJK フォントはリポジトリに同梱し、出所と公式ファイルとのハッシュ一致を `assets/licenses/SOURCES.txt` に記録しています。
 
 ## Windows 開発版
 
@@ -64,12 +64,50 @@ tools/export_windows.sh
 
 `.github/workflows/build.yml` は PR、main への push、手動実行で同じ `tools/export_windows.sh` を起動します。Markdown だけの変更では自動 export を省略し、必要なら手動実行します。権限は `contents: read`、45分のジョブ上限、同じブランチの古い実行のキャンセル、7日の artifact 保持、存在しない artifact の失敗扱いを設定しています。checkout v6.1.0 と upload-artifact v6.0.0 は公式タグを確認した commit SHA に固定しています。
 
-GitHub の **Actions → Windows development build → 成功した実行 → Artifacts** から `PRIMORDIAL_SEA_Windows_M1_5_<commit>` を取得して展開してください。GitHub が ZIP にするため内部を二重ZIPにはしません。最初の workflow が main に入るまでは手動実行ボタンが出ない場合があります。初回は PR の実行結果を確認し、ユーザーのレビューとマージ後に main の実行を見ます。
+GitHub の **Actions → Windows development build → 成功した実行 → Artifacts** から `PRIMORDIAL_SEA_Windows_M2_<commit>` を取得して展開してください。GitHub が ZIP にするため内部を二重ZIPにはしません。最初の workflow が main に入るまでは手動実行ボタンが出ない場合があります。初回は PR の実行結果を確認し、ユーザーのレビューとマージ後に main の実行を見ます。
 
 workflow ファイルを作ったこと、ローカルで成功したこと、GitHub で実行結果を確認したことは別です。実際の検証結果と描画確認は `docs/PROGRESS.md`、実機確認は `docs/PLAYTEST.md` を参照してください。
 
 
-## M1.5 の比較画像・動く本編
+## M2 の進行・経路・描画
+
+共通verifyは既存M1の試験を残し、次を追加します。実際の合否は `docs/M2_ACCEPTANCE.md` と `build/logs/` で確認してください。入口が存在すること自体を合格とは扱いません。
+
+| 試験 | 内容 | 成功マーカー |
+|---|---|---|
+| `save_migration_test.gd` | schema 1→2、原文退避、書込失敗・再試行、未来版拒否 | `SAVE_MIGRATION_OK` |
+| `m2_flow_test.gd` | 実mainでM1→M2、両回収順、中継後の死亡・終了、保管・改良・安定化の保存失敗とUI再試行 | `M2_FLOW_OK` |
+| `m2_interface_test.gd` | 14種のUI、720pスクロール、6ブイ、中継の距離/視線ガード、ポーズとフォーカス | `M2_INTERFACE_OK` |
+| `plains_ecology_test.gd` | 網・切断・自然採餌・実接触した捕食者の拘束 | `PLAINS_ECOLOGY_OK` |
+| `graveyard_ecology_test.gd` | 有限の音伝播、六面這いの調査・終了・防御・清掃 | `GRAVEYARD_ECOLOGY_OK` |
+| `palaeo_ecology_test.gd` | 実在モデル3種の行動と独立した捕食対象の再供給 | `PALAEO_OK` |
+| `m2_world_test.gd` | 新旧境界・地形と殻の物理経路 | `M2_WORLD_OK` |
+| `m2_routes_test.gd` | 通常Inputと実衝突で主要往復、迂回、途中の引き返し、酸素記録 | `M2_ROUTES_OK` |
+
+flowの回収地点への移動は明示した相互作用fixtureです。routeは基本480秒タンク・1.2秒カッター・誘餌/パルス0で、各独立ケースの初期M1完了checkpointと始点だけを設定します。その後は通常Input→Diverの慣性→`move_and_slide`、本編の酸素・生態を通します。通常の新規開始をM2へ変更しません。保存先は `user://automated-tests/` の実行ごとに異なる隔離ディレクトリです。
+
+`build/m2/routes/routes-manifest.json` はポッド↔中継、中継↔各部品、部品携行中の中継→ポッド、主/別経路と引き返しについて、出発時容量・残量、経過ゲーム秒、実移動距離、**補給直前残量と区間中の最小残量**を保存します。補給後の満タンを余裕に数えません。道を把握した固定ルートの確認であり、初見の45〜90分や人の難易度評価とは区別します。
+
+```bash
+tools/capture_m2.sh                         # build/m2 に静止画・2動画・独立metricsを生成
+tools/capture_m2.sh build/m2-draft probe     # 描画前に2生態をheadless実Inputで試走
+tools/capture_m2.sh build/m2 visuals         # 720p/1080pの代表画面のみ
+tools/capture_m2.sh build/m2 plains          # 平原の生態動画のみ
+tools/capture_m2.sh build/m2 graveyard       # 墓場の生態動画のみ
+tools/capture_m2.sh build/m2 metrics         # 1080p実時間計測のみ
+```
+
+非headlessの依存は次節と同じXvfb/Mesa、ffmpeg、Pillowです。静止画は本編進行を凍結し、カメラ位置、解像度、FOV、ライト、低粒子、UI画面と特別なfixtureを画像ごとのmanifestへ保存します。小型種は実寸を保持した観察ズームを明記します。通常FOVは80°。完了UIだけは両部品保管済みfixtureから実際の安定化保存処理を実行します。PNGはViewport生出力、contact sheetは元PNGを変更しない縮小一覧です。
+
+動く資料は平原・墓場それぞれ50秒を目安とする720p/24fpsのMovieMaker収録です。M1完了済みの隔離保存と1回だけの初期ダイバー配置を宣言し、以後はInputで泳ぎます。生物の状態・位置・速度を途中で上書きしません。通常の自然採餌・捕食者の実接触、Shiftによる発音・伝播・六面這いの実移動が起きたかを条件として判定します。描画前のprobeも正式動画と同じ24fpsで操作系列を確認しますが、映像の証拠とは区別します。墓場は入口手前で通常Inputにより整列し、初期の六面這いが占めていた低い通路（床上0.55m）を通ることも検査します。
+
+MP4はh264/AACへ符号化し、50秒以上の映像・音声、1280×720、24fpsをffprobeで検査します。補間・早回し・色補正はしません。元frame indexとPTSで抽出した全編2秒刻みの一覧と反応部分の連続フレームを補助資料にします。連続再生・聴取の検収を意味しません。`metrics` は固定fpsを指定せず独立実行し、1秒準備後のフレーム間隔・平均・p95/p99を記録します。Linux llvmpipeをWindows GPUの測定として扱いません。
+
+同じソースでのimportと描画を並行実行しないでください。正式収録中はコード・素材・harnessを凍結します。`capture-source-*.json` は開始時の実装headとcheckout、未コミット状態、実行素材・コード・制作/検証ツールのSHA256を記録し、終了時に同じ入力だったか照合します。変更があれば収録入口は失敗します。各撮影manifestの起動元を後から書き換えません。
+
+CIはM1.5の19組比較の代わりにこのM2入口を実行し、`PRIMORDIAL_SEA_M2_Evidence_<commit>` に画像・MP4・manifest・経路・ログ・レビュー文書を7日保存します。失敗時も部分的な証拠とログをアップロードします。Windows artifactと合わせ、末尾commitはPR検証checkoutである可能性があり、実装headはmanifest/BUILD_INFOで区別します。M1.5比較の入口は関連する描画を再検討するときに使えます。
+
+## M1.5 の比較画像・動く本編（独立した既存入口）
 
 ```bash
 tools/capture_visuals.sh                 # build/m1-5/after/
@@ -108,4 +146,4 @@ tools/capture_comparison.sh              # 改善前も Git から再生成し�
 
 `evidence.json` はファイルのSHA256、撮影・抽出harnessのSHA256、実装ブランチhead、ビルドcheckout commit、未コミット変更の有無と、Git対象ファイル全体の内容fingerprintを記録します。PRのCIでは `PRIMORDIAL_SOURCE_COMMIT` に実装head、`PRIMORDIAL_BUILD_COMMIT` に検証用merge commitを渡します。Windowsの `BUILD_INFO.txt` も両者を区別し、M1.5の版情報を記録します。
 
-CIはWindows版に加え、`PRIMORDIAL_SEA_Visuals_M1_5_<commit>` に改善前後PNG、MP4、frame列、manifest、ログ、レビュー文書を7日間保存します。描画や動画が失敗した場合はjobを失敗させ、成功した扱いにはしません。失敗時の部分的な証拠も取得できます。全体の実行上限は45分、各描画・収録にも個別timeoutがあります。PRのbaseをmainに限定していないため、M1実装ブランチへの積み重ねPRでも実行されます。
+M1.5時点のCIは `PRIMORDIAL_SEA_Visuals_M1_5_<commit>` に改善前後PNG、MP4、frame列、manifest、ログ、レビュー文書を7日間保存していました。現在のCIは上記M2証跡へ切り替えています。描画や動画が失敗した場合はjobを失敗させ、成功した扱いにはしません。失敗時の部分的な証拠も取得できます。全体の実行上限は45分、各描画・収録にも個別timeoutがあります。PRのbaseをmainに限定していないため、M1実装ブランチへの積み重ねPRでも実行されます。
