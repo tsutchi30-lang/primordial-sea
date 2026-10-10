@@ -24,12 +24,23 @@
 
 ### M1.5の実測・実行結果
 
-- 空のソースコピー（`.godot/`・生成音・buildなし）から音生成、import、smoke172項目、歩容30項目、ポッドからの本番Input移動、Windows EXE/PCK exportが終了0で成功しました。通常ビルドでBlenderは使いません。
+- 最終実装 `85faf4a` の空clone（`.godot/`・生成音・buildなし）から音生成、import、smoke172項目、歩容30項目、ポッドからの本番Input移動、Windows EXE/PCK exportが終了0で成功しました。通常ビルドでBlenderは使いません。ソースのない空フォルダからPCK単独のLinux/headless起動も30フレーム・終了0で成功しました。
 - 改善前後19組のカメラ・FOV・seed・ライトを照合し、全組の一覧と主要部位の原寸を目視しました。遭遇44.375秒・足元46.375秒のMP4、時刻付きフレーム列を生成し、全区間を時系列目視しました。連続再生・聴取の検収とは区別しています。
 - 本番Inputで腹側に9.18秒滞在し6.35m並走、退出を確認。専用試験では接地滑り・地形誤差0、11開口で人が往復、口器は遮断、6位置からの退出と閉塞時の中止が成功しました。
-- 独立した1080pのLinux llvmpipe測定は平均206.665ms（約4.84fps）、p95 228.950ms。Windows実GPUの結果ではありません。詳細と最終収録の条件はmanifestに記録します。
+- 独立した1080pのLinux llvmpipe測定は平均218.884ms（約4.57fps）、p95 241.508ms。Windows実GPUの結果ではありません。詳細と最終収録の条件はmanifestに記録します。
 - モデルのBlender再生成は全メッシュの位置・法線・UV・巻き順を照合し成功。接線のみ許容誤差0.0002内（最大0.000100017）です。
 - Windows OS上の起動、マウス、Alt+Tab、音の聴取、操作感、実GPU FPSは未確認です。`docs/PLAYTEST.md` に短い確認手順を残します。
+
+### M1.5の引き渡し（2026-10-10）
+
+- 作業ブランチ `codex/m1-5-visual-pass`、実装commit `85faf4a3e85632674d748b7578fd92b27ac4fcbd`。[Draft PR #2](https://github.com/tsutchi30-lang/primordial-sea/pull/2) は未マージのM1ブランチをbaseにしています。
+- [CI run 38041156540](https://github.com/tsutchi30-lang/primordial-sea/actions/runs/38041156540) の全工程が成功。import・172項目・30項目・ポッドからの入力移動・Windows export・前後19組の条件照合・2本のMP4・実時間計測・artifactアップロードをログで確認しました。
+- [Windows開発版](https://github.com/tsutchi30-lang/primordial-sea/actions/runs/38041156540/artifacts/11665797204)：`PRIMORDIAL_SEA_Windows_M1_5_df7511ef`、66,962,296 bytes、2026-10-17 09:23:34 UTCまで保存。
+- [比較画像・映像・撮影条件・レビュー](https://github.com/tsutchi30-lang/primordial-sea/actions/runs/38041156540/artifacts/11666022353)：`PRIMORDIAL_SEA_Visuals_M1_5_df7511ef`、162,171,498 bytes、2026-10-17 09:35:40 UTCまで保存。
+- [CI検証ログ](https://github.com/tsutchi30-lang/primordial-sea/actions/runs/38041156540/artifacts/11665857673)：artifact `11665857673`。末尾 `df7511ef` はPR用の検証merge commitで、実装head `85faf4a` と区別します。
+- ローカルのWindows配布物は `build/windows/`。同commitのclean cloneで作成し、EXE/PCKのSHA256を照合済み。`build/m1-5/` に原寸画像・最終動画・照合情報を残しました。
+- CIはUbuntu 24.04／Mesa 25.2.8／llvmpipe LLVM 20.1.2。静止画起動時のV-Sync変更非対応警告4回を記録し、ERRORなし・描画完了を確認しました。ローカルの目視と性能値はLLVM 19.1.7の別環境です。
+- この取得先・最終結果の追記は文書のみの後続commitです。実装と制作・検証コードは `85faf4a` のままで、CI済みの成果物を試してください。Windows実機・連続動画再生・音の聴取は上記の未確認項目です。
 
 ## M0＋M1の引き渡し履歴（以下は改善前の記録）
 

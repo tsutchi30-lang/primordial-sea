@@ -12,6 +12,8 @@ Godot 4.7.2 / GDScript / Compatibility で作る、Windows x86_64 向けの一�
 
 ## Windowsで遊ぶ
 
+[今回のWindows開発版をダウンロード](https://github.com/tsutchi30-lang/primordial-sea/actions/runs/38041156540/artifacts/11665797204)（実装 `85faf4a`、2026-10-17 09:23 UTCまで保存）。[比較画像・映像・撮影条件](https://github.com/tsutchi30-lang/primordial-sea/actions/runs/38041156540/artifacts/11666022353)も取得できます。
+
 GitHub の **Actions → Windows development build → 成功した実行 → Artifacts** から `PRIMORDIAL_SEA_Windows_M1_5_<commit>` をダウンロードし、フォルダ全体を展開して `PrimordialSea.exe` を起動します。`PrimordialSea.pck` とライセンス類を同じフォルダに保持してください。比較画像・映像・撮影条件は別の `PRIMORDIAL_SEA_Visuals_M1_5_<commit>` へ保存します。
 
 初回の workflow は PR のチェックから確認できます。`workflow_dispatch` の手動ボタンは、workflow が main に入るまで表示されないことがあります。PRをレビュー・マージした後は main の実行結果を確認してください。CIの実行結果とローカル検証の記録は [進捗](docs/PROGRESS.md) に分けて記載しています。

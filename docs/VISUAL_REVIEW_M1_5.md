@@ -31,9 +31,9 @@
 | V13 | 捕食者の通常・砂付着・予兆の差 | 元の膜・縁・収縮・消灯を保持 | 明暗・低粒子、捕食と砂の回帰 | 静止画で露出差、回帰で有限予兆を確認 | S07の6条件、smoke | 手動での避けやすさ |
 | V14 | 720p・1080pの日本語HUD | 既存配置を保持 | 主要画面を両解像度で目視 | 目的・酸素・操作表示に欠けなし | S01/S02/S05 | Windowsサイズ変更 |
 | V15 | 接近から退出までの場面 | 本編のInputと衝突を使用 | 44秒の遭遇再生 | 44.375秒MP4を生成、全区間の2秒刻みフレームを目視 | `motion/encounter.mp4`、`frames-encounter/` | 連続再生・Windows手操作 |
-| V16 | 素材込みクリーンimport・export | GLB/PNG同梱、固定版の入口 | 共通verify/export、CI | 空のソースコピーでimport→172項目→30項目→到達→Windows export成功 | buildログ | 最終commitのCI・Windows起動 |
+| V16 | 素材込みクリーンimport・export | GLB/PNG同梱、固定版の入口 | 共通verify/export、CI | 実装commitの空cloneとCIでimport→172項目→30項目→到達→Windows export成功 | buildログ、CI | Windows OS上の起動 |
 | V17 | 重要3点と既存M1の回帰 | HUD優先表示・保存トランザクション・共通上限 | 実HUDと保存障害、観察、航法復旧 | smoke172項目成功 | `build/logs/smoke.log` | Windowsでの通し操作 |
-| V18 | 画像・動く証拠・条件を取得できる | 比較と収録入口・manifest・CI artifacts | 生成とアップロード | 画像・動画・条件を生成、画像と時系列フレームを目視 | 本書と各manifest | 最終commitのCI・artifact URL確定 |
+| V18 | 画像・動く証拠・条件を取得できる | 比較と収録入口・manifest・CI artifacts | 生成とアップロード | 画像・動画・条件を生成してCI artifactへ保存、ローカル画像・時系列を目視 | 下記の取得先・各manifest | 保存期限後は再生成 |
 
 ## ロジックと本番移動の範囲
 
@@ -53,9 +53,9 @@
 
 `motion/gait.mp4` は1280×720、24fps、1,113フレーム、46.375秒、音声トラック付きです。全区間の2秒刻み、5〜8秒の接地付近の8fps抽出、24〜31秒の休息移行を時系列で目視しました。足の持ち上げと置き直し、体の移動、帆と房の変形、減速して休み再び歩く流れが見えます。自然な遷移の記録は予兆24.90秒→着床29.92秒→休息31.93秒→上昇38.95秒→歩行40.97秒です。
 
-接地砂が足底の内側に隠れる問題を原寸動画フレームで発見し、地面法線に沿う足外周の小さな輪へ修正しました。修正後の通常入力再生の5.75秒・6.25秒の原寸フレームで、足外側へ出る控えめな砂を目視しました。粒子は着地時だけ生成し、低粒子では18個から6個へ減らします。遊びに使う砂煙の状態には影響しません。最終ソースで2本の映像を再収録し、CIでも同じ入口を使います。
+接地砂が足底の内側に隠れる問題を原寸動画フレームで発見し、地面法線に沿う足外周の小さな輪へ修正しました。修正後の通常入力再生の5.75秒・6.25秒の原寸フレームで、足外側へ出る控えめな砂を目視しました。粒子は着地時だけ生成し、低粒子では18個から6個へ減らします。遊びに使う砂煙の状態には影響しません。最終ソースで2本の映像を再収録し、修正した砂を原寸で再確認しました。全収録入口が終了0・`MOTION_OK`で完走しました。CIでも同じ入口を使います。
 
-独立した実時間計測はLinux/Mesa llvmpipe LLVM 19.1.7（256 bits）、Compatibility、1920×1080、FOV80°、ライトOFF、通常粒子です。1秒のウォームアップ後112フレームの平均206.665ms（約4.84fps）、p95 228.950ms、p99 247.021ms、最大1,245.570msでした。ゲーム内15秒に壁時計23.365秒かかっています。ソフトウェア描画での測定であり、Windows実GPUやオフライン動画の出力24fpsと同一視しません。最終ソースの測定値は同梱 `motion/metrics-manifest.json` でも確認できます。
+独立した実時間計測はLinux/Mesa llvmpipe LLVM 19.1.7（256 bits）、Compatibility、1920×1080、FOV80°、ライトOFF、通常粒子です。1秒のウォームアップ後112フレームの平均218.884ms（約4.57fps）、p95 241.508ms、p99 341.231ms、最大1,171.056msでした。ゲーム内15秒に壁時計24.703秒かかっています。ソフトウェア描画での測定であり、Windows実GPUやオフライン動画の出力24fpsと同一視しません。最終ソースの測定値は同梱 `motion/metrics-manifest.json` でも確認できます。
 
 音声はAACトラックの存在・時間・非無音の波形まで確認しました。スピーカーやヘッドホンによる聴取は未実施です。
 
@@ -66,6 +66,24 @@
 | 酸素0の警告がHUDに上書きされる | 毎フレームのHUDで最優先し、残る8秒猶予を表示。浮上・死亡で解除 | 観察表示と競合する24フレーム、浮上、死亡 |
 | 帰投・修理の保存失敗が成功扱い | 候補データを保存後に資材と状態を確定。帰投失敗時もポッドで安全を保ち、再試行UIを出す | 隔離領域の一時ファイルを書込不能にし、失敗表示・旧保存保持・再試行・再読込・二重消費なし |
 | 999を超える保管金属が読込不可 | 全入口で上限1,000,000へ統一。超過時は資材を保持し、読めない保存を書かない | 999→1000、上限、負数・小数・不正型、旧schema 1 |
+
+## 成果物とソースの対応
+
+実装commitは `85faf4a3e85632674d748b7578fd92b27ac4fcbd`、レビューは [Draft PR #2](https://github.com/tsutchi30-lang/primordial-sea/pull/2)。空のcloneから同commitをimport・検証・exportし、`Source tree: clean` を確認しました。書き出したPCKだけをソースのない空フォルダへ指定し、Linux/headlessで30フレームの起動が終了0、エラーなしで成功しています。Windows OS上の実行とは別です。
+
+ローカルの最終動画はcommit前に起動したため、replay manifestの起動元は `7a23754` と未コミットの作業ツリーです。撮影中に凍結した107件の実行素材・コードのSHA256が、確定した `85faf4a` と全件一致したことを `motion/capture-source.json` に残しました。起動時のcommitを撮影後に書き換えてはいません。CIでは実装headとPR用merge commitをそれぞれ記録します。
+
+[CI run 38041156540](https://github.com/tsutchi30-lang/primordial-sea/actions/runs/38041156540) は全工程が成功しました。jobログで `SMOKE_OK checks=172`、`HOGARA_GAIT_OK checks=30`、通常Inputの到達、`WINDOWS_EXPORT_OK`、`COMPARISON_CONDITIONS_OK images=19`、両MP4の長さとAAC、`MOTION_OK`、`COMPARISON_OK`、3件のartifactアップロードを確認しました。実装headは `85faf4a`、実際のPR検証checkoutは `df7511ef959a7037c9d5bec55146727b6562453a` です。
+
+| 配布物 | 内容・取得先 | サイズ・保存期限 UTC |
+|---|---|---|
+| Windows | [PRIMORDIAL_SEA_Windows_M1_5_df7511ef](https://github.com/tsutchi30-lang/primordial-sea/actions/runs/38041156540/artifacts/11665797204) | 66,962,296 bytes・2026-10-17 09:23:34 |
+| 見た目の証拠 | [PRIMORDIAL_SEA_Visuals_M1_5_df7511ef](https://github.com/tsutchi30-lang/primordial-sea/actions/runs/38041156540/artifacts/11666022353) | 162,171,498 bytes・2026-10-17 09:35:40 |
+| 検証ログ | [verification-logs-38041156540-1](https://github.com/tsutchi30-lang/primordial-sea/actions/runs/38041156540/artifacts/11665857673) | 5,454 bytes・2026-10-17 09:35:46 |
+
+CIの描画はUbuntu 24.04、Mesa 25.2.8／llvmpipe LLVM 20.1.2です。ローカルの目視・実測環境（LLVM 19.1.7）と区別します。CIログに、仮想ディスプレイのドライバがV-Sync変更に対応しないという警告が静止画起動時に4回ありました。スクリプト・資源のERRORはなく、描画と条件照合は成功しています。CIは生成とuploadを確認した結果であり、CIのZIP全画像をもう一度目視した記録ではありません。
+
+artifact内のレビュー文書は実装commit時点の記録です。本項のCI結果・最終測定・取得先の追記は文書のみの後続commitで、ゲームと制作・検証コードは同じ `85faf4a` です。
 
 ## 実機で残る確認
 
