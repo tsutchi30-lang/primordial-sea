@@ -254,7 +254,14 @@ func update_game(game) -> void:
 		direction_label.text += "\n深度 %d m　ポッド直線 %d m" % [maxi(0, -int(game.player.position.y)), pod_distance]
 	hint_label.text = game.interaction_hint()
 	toast_label.text = game.toast_text if game.toast_remaining > 0 else ""
-	observation_label.text = "観察中  %d %%" % mini(100, int(game.observe_time / 2.3 * 100)) if game.observe_time > 0 else ""
+	# This is the sole writer of the shared status label. Physics updates supply
+	# state; the HUD gives urgent hypoxia priority on every rendered frame.
+	if game.mode != "play" or game.state.dead:
+		observation_label.text = ""
+	elif oxygen <= 0 and not game.player.in_pod and not game.player.breathing_air:
+		observation_label.text = "酸素切れ — 浮上してください！ 残り %.1f 秒" % game.state.anoxia_remaining()
+	else:
+		observation_label.text = "観察中  %d %%" % mini(100, int(game.observe_time / 2.3 * 100)) if game.observe_time > 0 else ""
 	update_markers(game)
 
 func update_markers(game) -> void:

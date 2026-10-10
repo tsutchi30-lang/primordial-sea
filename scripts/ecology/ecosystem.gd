@@ -11,6 +11,7 @@ const Art = preload("res://scripts/creatures/creature_mesh.gd")
 signal player_hit(amount: float)
 signal hint(text: String)
 signal observed_event(species_id: String, event_id: String)
+signal footfall(at: Vector3, strength: float)
 var player: CharacterBody3D
 var world: Node3D
 var creatures: Array[Node3D] = []
@@ -58,6 +59,8 @@ func get_species_data() -> Dictionary:
 
 func set_low_particles(low: bool) -> void:
 	low_particles = low
+	if is_instance_valid(hogara) and hogara.has_method("set_low_particles"):
+		hogara.set_low_particles(low)
 	for school in schools:
 		for i in school.grains.size():
 			school.grains[i].visible = not low or i % 2 == 0
@@ -86,6 +89,7 @@ func _spawn() -> void:
 	hogara = Hogara.new()
 	add_child(hogara)
 	hogara.setup(world)
+	hogara.footfall.connect(func(_index: int, at: Vector3, strength: float): footfall.emit(at, strength))
 	hogara.event_started.connect(func(event_id: String):
 		observed_event.emit("hogara", event_id)
 		if event_id == "rest_warning" and player.global_position.distance_to(hogara.global_position) < 12.0:
@@ -249,10 +253,11 @@ func get_silt_strength(at: Vector3) -> float:
 		strength = maxf(strength, cloud.strength_at(at))
 	return strength
 
-func has_clear_path(from: Vector3, to: Vector3) -> bool:
+func has_clear_path(from: Vector3, to: Vector3, excluded: Array[RID] = []) -> bool:
 	if from.distance_squared_to(to) < 0.0001:
 		return true
 	var query := PhysicsRayQueryParameters3D.create(from, to, 1 | 8)
+	query.exclude = excluded
 	return get_world_3d().direct_space_state.intersect_ray(query).is_empty()
 
 func get_observation_target(camera: Camera3D) -> Node3D:
@@ -269,7 +274,14 @@ func get_observation_target(camera: Camera3D) -> Node3D:
 			continue
 		# A transparent predator remains an ordinary visual target; scanning never
 		# reveals every hidden predator or records behaviour behind terrain.
-		if not has_clear_path(camera.global_position, target):
+		var target_bodies: Array[RID] = []
+		if creature == hogara:
+			# The focus point lies inside the thick shell. Ignore only this target's
+			# own anatomy; terrain still occludes observation, and predator/shelter
+			# rays continue to collide with every part of the shell.
+			for part: Dictionary in hogara.collision_parts:
+				target_bodies.append(part.body.get_rid())
+		if not has_clear_path(camera.global_position, target, target_bodies):
 			continue
 		var score := alignment - distance * 0.0003
 		if score > best_score:

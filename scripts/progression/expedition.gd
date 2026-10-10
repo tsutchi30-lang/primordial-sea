@@ -1,7 +1,11 @@
 extends RefCounted
 
 const BASE_OXYGEN := 480.0
+const ANOXIA_GRACE := 8.0
 const REPAIR_METAL := 2
+const CARRIED_METAL_LIMIT := 12
+# One shared range for collection, deposit, checkpoint writes and old/new reads.
+const MAX_STORED_METAL := 1000000
 var oxygen := BASE_OXYGEN
 var suit := 100.0
 var anoxia := 0.0
@@ -30,7 +34,7 @@ func tick(delta: float, underwater: bool, sprinting: bool) -> String:
 		oxygen = maxf(0, oxygen - delta * rate)
 		if oxygen <= 0:
 			anoxia += delta - supplied_seconds
-			if anoxia >= 8.0:
+			if anoxia >= ANOXIA_GRACE:
 				dead = true
 				return "酸素が尽きました。水面で外気呼吸するか、早めにポッドへ帰りましょう。"
 	else:
@@ -62,12 +66,23 @@ func collect_nav() -> bool:
 	nav = "carried"
 	return true
 
-func deposit() -> void:
+func anoxia_remaining() -> float:
+	return maxf(0.0, ANOXIA_GRACE - anoxia)
+
+static func valid_metal_amount(value: Variant) -> bool:
+	return (value is int or value is float) and is_finite(float(value)) and value >= 0 and value <= MAX_STORED_METAL and floor(value) == value
+
+func deposit() -> bool:
+	# The collection limit prevents this in ordinary play. A defensive rejection
+	# keeps every carried item intact instead of silently clamping away overflow.
+	if not valid_metal_amount(stored_metal) or carried_metal < 0 or not valid_metal_amount(stored_metal + carried_metal):
+		return false
 	stored_metal += carried_metal
 	carried_metal = 0
 	if nav == "carried":
 		nav = "stored"
 	refill()
+	return true
 
 func repair() -> bool:
 	if nav != "stored" or stored_metal < REPAIR_METAL:

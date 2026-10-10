@@ -1,5 +1,6 @@
 extends RefCounted
 
+const Expedition = preload("res://scripts/progression/expedition.gd")
 var directory := "user://"
 var last_error := ""
 const DEFAULT_SETTINGS = {"sensitivity": 0.0025, "invert_y": false, "fov": 80.0, "shake": 0.25, "master": 0.75, "bgm": 0.5, "sfx": 0.7, "ui": 0.6, "low_particles": false, "fullscreen": false}
@@ -54,22 +55,29 @@ func load_checkpoint() -> Dictionary:
 	var data := read_json("checkpoint")
 	if data.is_empty():
 		return {}
+	last_error = _checkpoint_error(data)
+	return data if last_error.is_empty() else {}
+
+func save_checkpoint(data: Dictionary) -> bool:
+	# Never write a checkpoint that this same version would refuse to load.
+	last_error = _checkpoint_error(data)
+	if not last_error.is_empty():
+		return false
+	return write_json("checkpoint", data)
+
+func _checkpoint_error(data: Dictionary) -> String:
 	if data.get("schema_version") != 1 or not data.get("nav") in ["wreck", "stored", "repaired"]:
-		last_error = "この保存形式は読み込めません。新規開始を選ぶと上書きできます。"
-		return {}
+		return "この保存形式は読み込めません。新規開始を選ぶと上書きできます。"
 	var metal = data.get("stored_metal")
-	if not (metal is float or metal is int) or metal < 0 or metal > 999 or floor(metal) != metal or not data.get("tank_upgraded") is bool or not data.get("buoys") is Array or data.buoys.size() > 3:
-		last_error = "保存データの内容が不正です。既存ファイルは変更していません。"
-		return {}
+	if not Expedition.valid_metal_amount(metal) or not data.get("tank_upgraded") is bool or not data.get("buoys") is Array or data.buoys.size() > 3:
+		return "保存データの内容が不正です。既存ファイルは変更していません。"
 	for point in data.buoys:
 		if not point is Array or point.size() != 3:
-			last_error = "目印の保存データが不正です。"
-			return {}
+			return "目印の保存データが不正です。"
 		for coordinate in point:
 			if not (coordinate is float or coordinate is int) or not is_finite(coordinate) or absf(coordinate) > 500:
-				last_error = "目印の保存座標が不正です。"
-				return {}
-	return data
+				return "目印の保存座標が不正です。"
+	return ""
 
 func load_settings() -> Dictionary:
 	var saved := read_json("settings")

@@ -47,6 +47,7 @@ func run() -> void:
 	test_oxygen_and_damage()
 	test_checkpoint_contract()
 	test_save_validation()
+	test_metal_save_boundaries()
 	await test_scene()
 	if is_instance_valid(game):
 		paused = false
@@ -115,9 +116,9 @@ func test_save_validation() -> void:
 	saves.directory = test_directory.path_join("unit")
 	check(not saves.exists() and saves.load_checkpoint().is_empty(), "missing checkpoint is handled")
 	var state = Expedition.new()
-	check(saves.write_json("checkpoint", state.checkpoint()), "first checkpoint write succeeds")
+	check(saves.save_checkpoint(state.checkpoint()), "first checkpoint write succeeds")
 	state.stored_metal = 2
-	check(saves.write_json("checkpoint", state.checkpoint()), "atomic replacement succeeds")
+	check(saves.save_checkpoint(state.checkpoint()), "atomic replacement succeeds")
 	check(saves.load_checkpoint().get("stored_metal") == 2, "replacement contains latest complete snapshot")
 	check(not FileAccess.file_exists(saves.path("checkpoint") + ".tmp"), "successful replacement leaves no temporary save")
 	var settings = SaveStore.DEFAULT_SETTINGS.duplicate()
@@ -145,7 +146,33 @@ func test_save_validation() -> void:
 	file.close()
 	check(saves.load_checkpoint().is_empty() and not saves.last_error.is_empty(), "truncated JSON yields a recoverable error")
 	check(saves.load_settings().fov == 94, "corrupt progression does not erase settings")
-	check(saves.write_json("checkpoint", state.checkpoint()) and not saves.load_checkpoint().is_empty(), "explicit new game can recover after corrupt save")
+	check(saves.save_checkpoint(state.checkpoint()) and not saves.load_checkpoint().is_empty(), "explicit new game can recover after corrupt save")
+
+func test_metal_save_boundaries() -> void:
+	section("shared metal bounds / schema 1 / rejected write preserves good save")
+	var saves = SaveStore.new()
+	saves.directory = test_directory.path_join("metal-boundaries")
+	# This is the original schema, without new fields or a migration requirement.
+	var snapshot := {"schema_version": 1, "nav": "stored", "stored_metal": 999, "tank_upgraded": false, "buoys": []}
+	for amount in [998, 999, 1000, 1001, Expedition.MAX_STORED_METAL - 1, Expedition.MAX_STORED_METAL]:
+		snapshot.stored_metal = amount
+		check(saves.save_checkpoint(snapshot) and saves.load_checkpoint().get("stored_metal") == amount, "metal %d round trips through production checkpoint writer/reader" % amount)
+	var good_bytes := FileAccess.get_file_as_bytes(saves.path("checkpoint"))
+	for amount in [-1, 0.5, INF, NAN, Expedition.MAX_STORED_METAL + 1]:
+		snapshot.stored_metal = amount
+		check(not saves.save_checkpoint(snapshot) and not saves.last_error.is_empty(), "invalid metal %s is rejected before writing" % str(amount))
+		check(FileAccess.get_file_as_bytes(saves.path("checkpoint")) == good_bytes, "invalid metal write preserves previous good bytes")
+	for amount in [-1, 0.5, Expedition.MAX_STORED_METAL + 1]:
+		snapshot.stored_metal = amount
+		saves.write_json("checkpoint", snapshot) # Deliberately corrupt a test-only file.
+		check(saves.load_checkpoint().is_empty(), "invalid existing metal cannot load: %s" % str(amount))
+	var state = Expedition.new()
+	state.nav = "carried"
+	state.stored_metal = Expedition.MAX_STORED_METAL - 1
+	state.carried_metal = 2
+	check(not state.deposit() and state.stored_metal == Expedition.MAX_STORED_METAL - 1 and state.carried_metal == 2 and state.nav == "carried", "defensive overflowing deposit preserves every item and objective state")
+	state.stored_metal -= 1
+	check(state.deposit() and state.stored_metal == Expedition.MAX_STORED_METAL and state.carried_metal == 0 and state.nav == "stored", "deposit at the exact shared limit succeeds")
 
 func test_scene() -> void:
 	section("production scene / title / new game")
@@ -168,7 +195,11 @@ func test_scene() -> void:
 	await test_terrain_routes()
 	await test_input_pause()
 	await test_observation()
+	await test_hogara_observation()
+	await test_hypoxia_hud()
 	await test_scene_progression()
+	await test_checkpoint_failures()
+	await test_metal_collection_boundary()
 	await test_ecology()
 
 func test_terrain_routes() -> void:
@@ -278,6 +309,85 @@ func test_observation() -> void:
 	check(game.saves.load_observations().has("opabinia"), "observation is independently saved")
 	check(game.saves.load_checkpoint().get("nav") == "wreck", "notebook saving cannot bank underwater progression")
 
+func test_hogara_observation() -> void:
+	section("external Hogara observation / own anatomy / terrain occlusion")
+	game.start_new_game()
+	game.depart_pod()
+	var animal = game.ecology.hogara
+	game.player.relocate(animal.model.to_global(Vector3(8, 4.2, 6)), false)
+	game.player.camera.look_at(animal.observation_position())
+	game.select_tool(0)
+	await physics_frames(18)
+	game.set_physics_process(false)
+	game.player.active = false
+	var at: Vector3 = animal.observation_position()
+	game.player.camera.look_at(at)
+	# This wall is an isolated terrain-layer fixture between a natural external
+	# camera and the model. Excluding target anatomy must not exclude this wall.
+	var blocker := StaticBody3D.new()
+	blocker.collision_layer = 1
+	blocker.collision_mask = 0
+	var shape := CollisionShape3D.new()
+	var box := BoxShape3D.new()
+	box.size = Vector3.ONE * 2.0
+	shape.shape = box
+	blocker.add_child(shape)
+	game.add_child(blocker)
+	blocker.global_position = game.player.camera.global_position.lerp(at, 0.5)
+	await physics_frames(2)
+	Input.action_press("use_tool")
+	for _index in 52:
+		game._update_observation(0.05)
+	check(game.ecology.get_observation_target(game.player.camera) != animal and not game.observations.has("hogara"), "solid terrain between camera and shell prevents identification after a full observation hold")
+	blocker.queue_free()
+	await physics_frames(2)
+	check(game.ecology.get_observation_target(game.player.camera) == animal, "external observation can focus through only the target's own thick shell")
+	check(not game.ecology.has_clear_path(game.player.camera.global_position, at), "ordinary ecology sight rays still collide with the same hard shell")
+	for _index in 52:
+		game._update_observation(0.05)
+	Input.action_release("use_tool")
+	check("identified" in game.observations.get("hogara", []) and game.saves.load_observations().has("hogara"), "holding the real observer identifies and persists the externally visible Hogara")
+	game.set_physics_process(true)
+	game.player.active = true
+
+func test_hypoxia_hud() -> void:
+	section("visible hypoxia HUD / repeated rendered frames / surface and death")
+	game.start_new_game()
+	game.depart_pod()
+	game.player.relocate(Vector3(40, -4, -18), false)
+	game.player.active = false
+	game.set_physics_process(false)
+	game.state.oxygen = 0
+	game.state.anoxia = 1.0
+	var first_warning := ""
+	var all_frames_visible := true
+	for index in 8:
+		# Exercise the real physics controller followed by multiple actual HUD
+		# render frames: the former bug was a later _process overwriting the label.
+		game._physics_process(0.1)
+		game.observe_time = 1.2 # A competing, lower-priority observation status.
+		await frames(3)
+		var text: String = game.hud.observation_label.text
+		var expected_countdown := "残り %.1f 秒" % (6.9 - index * 0.1)
+		all_frames_visible = all_frames_visible and "酸素切れ" in text and "浮上" in text and expected_countdown in text and not "観察中" in text
+		if index == 0:
+			first_warning = text
+	check(all_frames_visible, "zero oxygen warning survives 24 render frames and takes priority over observation")
+	check(first_warning != game.hud.observation_label.text and game.state.anoxia > 1.7, "visible grace countdown changes as production hypoxia advances")
+	game.player.relocate(Vector3(40, 0.6, -18), false)
+	game._physics_process(0.1)
+	game.observe_time = 1.2
+	await frames(3)
+	check(game.state.anoxia == 0 and not "酸素切れ" in game.hud.observation_label.text and "観察中" in game.hud.observation_label.text, "surface removes hypoxia warning and restores normal observation priority")
+	game.player.relocate(Vector3(40, -4, -18), false)
+	game.die("HUD 回帰試験")
+	await frames(3)
+	check(game.hud.observation_label.text.is_empty(), "death clears the active hypoxia warning")
+	game.load_game()
+	await frames(3)
+	check(not "酸素切れ" in game.hud.observation_label.text and game.player.in_pod, "safe pod load does not retain a stale hypoxia warning")
+	game.set_physics_process(true)
+
 func test_scene_progression() -> void:
 	# Fixture relocation saves CI travel time. Actual pickup distance validation,
 	# item state, deposit, checkpoint, repair, death and reload use production methods.
@@ -338,6 +448,93 @@ func test_scene_progression() -> void:
 	game.resume_game()
 	game.depart_pod()
 	check(game.mode == "play" and not game.player.in_pod, "exploration remains available after M1 completion")
+
+func collect_real_metal(amount: int) -> void:
+	var collected := 0
+	for target in game.pickups:
+		if collected >= amount:
+			break
+		if target.kind != "metal" or not target.visible:
+			continue
+		game.player.relocate(target.global_position + Vector3(0, 0, 1), false)
+		game.player.camera.look_at(target.global_position)
+		if game.collect_target(target):
+			collected += 1
+	check(collected == amount, "actual nearby metal interactions collect the fixture cargo")
+
+func block_checkpoint_write() -> String:
+	# A directory at the temporary file path makes FileAccess.WRITE fail even
+	# under root. Only this run's isolated user:// directory is touched.
+	var temp_path: String = game.saves.path("checkpoint") + ".tmp"
+	check(DirAccess.make_dir_recursive_absolute(temp_path) == OK, "deterministic isolated save-failure fixture is installed")
+	return temp_path
+
+func press_save_retry_button() -> bool:
+	for child in game.hud.menu_box.get_children():
+		if child is Button and child.text == "保存を再試行":
+			child.pressed.emit()
+			return true
+	return false
+
+func test_checkpoint_failures() -> void:
+	section("return / repair save failure / actual UI retry / no lost or duplicated cargo")
+	game.start_new_game()
+	game.depart_pod()
+	collect_real_metal(2)
+	game.player.relocate(game.nav_unit.global_position + Vector3(0, 0, 1), false)
+	game.player.camera.look_at(game.nav_unit.global_position)
+	check(game.collect_target(game.nav_unit), "failure scenario starts with the real unique navigation unit")
+	var prior_checkpoint: Dictionary = game.checkpoint.duplicate(true)
+	var prior_bytes := FileAccess.get_file_as_bytes(game.saves.path("checkpoint"))
+	var blocker := block_checkpoint_write()
+	game.state.oxygen = 13
+	game.state.suit = 28
+	game.player.relocate(game.ENTRY, false)
+	game.interact() # E interaction must not fall through after a failed return.
+	await frames(3)
+	check(game.player.in_pod and paused and game.hud.page == "save_failed", "failed return moves to the safe pod and presents an actionable save error")
+	check(game.state.oxygen == game.state.capacity() and game.state.suit == 100, "failed saving cannot strand an injured diver without air")
+	check(game.state.nav == "carried" and game.state.carried_metal == 2 and game.state.stored_metal == 0, "failed return retains uncommitted cargo without banking or consuming it")
+	check(game.checkpoint == prior_checkpoint and FileAccess.get_file_as_bytes(game.saves.path("checkpoint")) == prior_bytes, "failed return preserves both the prior live checkpoint and exact on-disk bytes")
+	check(not game.nav_unit.visible and not "帰投完了" in game.toast_text and not game.checkpoint_error.is_empty(), "failed return neither duplicates the unit nor overwrites its error with success")
+	check(not game.retry_checkpoint() and game.state.carried_metal == 2 and game.state.nav == "carried", "repeated blocked return retry leaves cargo intact")
+	game.resume_game()
+	check(paused and game.hud.page == "save_failed" and not game.depart_pod(), "Escape or departure cannot bypass an unresolved cargo save")
+	check(DirAccess.remove_absolute(blocker) == OK and press_save_retry_button(), "the visible retry button resumes saving after storage recovers")
+	check(not paused and game.pending_checkpoint_action.is_empty() and game.state.nav == "stored" and game.state.stored_metal == 2 and game.state.carried_metal == 0, "return retry commits each item exactly once")
+	check(game.saves.load_checkpoint().get("nav") == "stored" and not game.nav_unit.visible, "retried deposit is durable with one navigation unit")
+	prior_checkpoint = game.checkpoint.duplicate(true)
+	prior_bytes = FileAccess.get_file_as_bytes(game.saves.path("checkpoint"))
+	blocker = block_checkpoint_write()
+	check(not game.repair_navigation() and game.hud.page == "save_failed", "repair save failure does not display completion")
+	check(game.state.nav == "stored" and game.state.stored_metal == 2 and game.checkpoint == prior_checkpoint, "failed repair retains its unit and both required metal")
+	check(not game.retry_checkpoint() and game.state.stored_metal == 2 and FileAccess.get_file_as_bytes(game.saves.path("checkpoint")) == prior_bytes, "repeated repair failure never consumes metal or replaces the good file")
+	check(DirAccess.remove_absolute(blocker) == OK and press_save_retry_button(), "repair has the same usable UI retry path")
+	check(game.state.nav == "repaired" and game.state.stored_metal == 0 and game.hud.page == "complete", "successful retry alone consumes two metal and shows completion")
+	check(not game.retry_checkpoint() and not game.repair_navigation() and game.state.stored_metal == 0, "repeated retry or repair cannot consume a second time")
+	check(game.load_game() and game.state.nav == "repaired" and game.state.stored_metal == 0, "retried repair survives reload without duplicating its unit")
+	await frames(3)
+
+func test_metal_collection_boundary() -> void:
+	section("real collection / return / reload at 1000 and storage maximum")
+	for initial in [999, Expedition.MAX_STORED_METAL - 1]:
+		game.start_new_game()
+		game.state.stored_metal = initial
+		check(game.depart_pod(), "boundary fixture starts at a saved pod checkpoint")
+		collect_real_metal(1)
+		if initial == Expedition.MAX_STORED_METAL - 1:
+			for target in game.pickups:
+				if target.kind == "metal" and target.visible:
+					game.player.relocate(target.global_position + Vector3(0, 0, 1), false)
+					game.player.camera.look_at(target.global_position)
+					check(not game.collect_target(target) and target.visible and game.state.carried_metal == 1, "at the total cap an extra pickup stays in the world and cargo is retained")
+					break
+		game.player.relocate(game.ENTRY, false)
+		check(game.return_to_pod() and game.state.stored_metal == initial + 1, "real return accepts boundary total %d" % (initial + 1))
+		check(game.load_game() and game.state.stored_metal == initial + 1, "real checkpoint reload accepts that same boundary total")
+	game.start_new_game()
+	game.depart_pod()
+	await frames(3)
 
 func test_ecology() -> void:
 	section("production ecology")
@@ -452,25 +649,34 @@ func test_hogara_passage() -> void:
 	game.ecology.reset()
 	var hogara = game.ecology.hogara
 	var predator = game.ecology.predators[0]
-	game.player.relocate(hogara.to_global(Vector3(4.8, 1.7, 0.85)), false)
+	# Gap endpoints belong to the actual tilted model, not world axes or the
+	# routing root. Test the same physical opening with both real body sizes.
+	# The central +Z gap is clear of the front leg at this initial gait phase;
+	# the dedicated gait suite covers all candidates and blocked-exit replanning.
+	var gap: Dictionary = hogara.model.get_exit_gaps()[2]
+	var outside: Vector3 = hogara.model.to_global(gap.outside)
+	var inside: Vector3 = hogara.model.to_global(gap.inside)
+	game.player.relocate(outside, false)
 	await physics_frames(2)
-	for _index in 28:
-		game.player.move_and_collide(Vector3(-0.1, 0, 0))
+	for _index in 30:
+		game.player.move_and_collide((inside - game.player.global_position).limit_length(0.1))
 	check(game.ecology.is_sheltered(game.player.global_position), "0.6 metre diver physically enters a 1.1 metre gap")
 	check(game.player.get_parent() == game, "shelter never reparents the camera or diver")
 	for _index in 30:
-		game.player.move_and_collide(Vector3(0.1, 0, 0))
+		game.player.move_and_collide((outside - game.player.global_position).limit_length(0.1))
 	check(not game.ecology.is_sheltered(game.player.global_position), "diver can swim back out through the gap")
-	predator.global_position = hogara.to_global(Vector3(4.8, 1.7, 0.85))
+	predator.global_position = outside
 	await physics_frames(2)
-	for _index in 28:
-		predator.move_and_collide(Vector3(-0.1, 0, 0))
+	for _index in 30:
+		predator.move_and_collide((inside - predator.global_position).limit_length(0.1))
 	check(not game.ecology.is_sheltered(predator.global_position), "1.4 metre predator mouth cannot pass the same physical gap")
-	game.player.relocate(hogara.to_global(Vector3(0, 1.7, 0)), false)
+	game.player.relocate(hogara.model.to_global(Vector3(0, 1.7, 0)), false)
 	var oxygen: float = game.state.oxygen
 	hogara.state = "rest_warning"
 	hogara.state_time = 0
-	for _index in 180:
+	for _index in 260:
 		hogara.tick(0.05, game.player, Vector3(100, -10, 100))
-	check(not hogara.contains(game.player.global_position) and hogara.state == "rest", "warning gently exits the diver before the shell lowers")
+		if hogara.state == "rest":
+			break
+	check(not hogara._under_roof(game.player.global_position) and hogara.state == "rest", "warning gently exits the diver completely before the shell rests")
 	check(game.state.oxygen == oxygen, "shelter supplies no oxygen refill")

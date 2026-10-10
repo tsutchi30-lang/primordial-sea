@@ -1,0 +1,84 @@
+{
+  "asset": "hogara.glb",
+  "authoring_tool": "4.3.2",
+  "seed": 50317115,
+  "metres": true,
+  "godot_axis": "Y up / forward -Z",
+  "mesh_objects": 77,
+  "triangles": 83966,
+  "material_count": 8,
+  "texture_resolution": {
+    "carapace": 1024,
+    "ivory": 1024,
+    "tissue": 512,
+    "sail_thickness": 1024
+  },
+  "hip_positions": [
+    [
+      -2.45,
+      3.25,
+      -2.05
+    ],
+    [
+      2.45,
+      3.25,
+      -2.05
+    ],
+    [
+      0,
+      3.25,
+      2.7
+    ]
+  ],
+  "rest_feet": [
+    [
+      -4,
+      0,
+      -2.7
+    ],
+    [
+      4,
+      0,
+      -2.7
+    ],
+    [
+      0,
+      0,
+      4.5
+    ]
+  ],
+  "collision_meshes": [
+    "Carapace",
+    "Rib00",
+    "Rib01",
+    "Rib02",
+    "Rib03",
+    "Rib04",
+    "Rib05",
+    "Rib06",
+    "Rib07",
+    "Rib08",
+    "Rib09",
+    "Rib10",
+    "Rib11",
+    "Rib12",
+    "Rib13",
+    "Rib14",
+    "Rib15",
+    "Rib16",
+    "Rib17",
+    "Upper0",
+    "Joint0",
+    "Lower0",
+    "Foot0",
+    "Upper1",
+    "Joint1",
+    "Lower1",
+    "Foot1",
+    "Upper2",
+    "Joint2",
+    "Lower2",
+    "Foot2"
+  ],
+  "sha256": "19ff134bf62dcd65ddcd748e184d69096a870f1f8fb74193a45fb09b8277ef05"
+}

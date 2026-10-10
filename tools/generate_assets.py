@@ -60,6 +60,10 @@ def make_sound(name: str, seconds: float) -> bytes:
             signal = 0.16 * math.sin(TAU * (49 * t + 1.2 * math.sin(TAU * t * 0.3)))
             signal += 0.08 * math.sin(TAU * 73.5 * t) + 0.14 * filtered
             signal *= math.sin(math.pi * u) ** 2
+        elif name == "footfall":
+            # Muted underwater pressure/settling sand, synchronized to real contact.
+            signal = 0.20 * math.sin(TAU * (62 * t - 11 * t * t)) * math.exp(-8 * u)
+            signal += 0.24 * filtered * math.sin(math.pi * u) * math.exp(-4 * u)
         elif name == "ui":
             signal = 0.12 * math.sin(TAU * 720 * t) * math.exp(-7 * u)
         else:
@@ -78,7 +82,8 @@ def make_sound(name: str, seconds: float) -> bytes:
 def main() -> None:
     DESTINATION.mkdir(parents=True, exist_ok=True)
     sounds = {"pod_hum": 4.0, "water": 4.0, "warning": 0.65, "pulse": 0.7,
-              "pickup": 0.35, "success": 2.2, "membrane": 0.8, "hogara": 2.0, "ui": 0.14}
+              "pickup": 0.35, "success": 2.2, "membrane": 0.8, "hogara": 2.0, "ui": 0.14,
+              "footfall": 0.72}
     for name, duration in sounds.items():
         path = DESTINATION / f"{name}.wav"
         data = make_sound(name, duration)

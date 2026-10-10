@@ -37,13 +37,16 @@ PY
 mkdir -p "$output_dir/licenses"
 cp assets/licenses/*.txt "$output_dir/licenses/"
 cp docs/PLAYTEST.md "$output_dir/PLAYTEST_日本語.md"
+for doc in VISUAL_REVIEW_M1_5.md ART_DIRECTION.md ASSET_PIPELINE.md; do
+  if [[ -f "docs/$doc" ]]; then cp "docs/$doc" "$output_dir/$doc"; fi
+done
 cp build/logs/VERIFIED.txt "$output_dir/VERIFICATION.txt"
 cat >> "$output_dir/VERIFICATION.txt" <<'TXT'
 WINDOWS_EXPORT_OK: PE executable and separate PCK verified.
 This is an export check, not a Windows device playtest.
 TXT
 cat > "$output_dir/はじめに.txt" <<'TXT'
-原初の海 — 航法復旧編 / Windows x86_64 開発版
+原初の海 — 航法復旧編 / M1.5 見た目改善版 / Windows x86_64
 
 展開したフォルダから PrimordialSea.exe を起動してください。
 PrimordialSea.pck と licenses フォルダを同じ場所に残してください。
@@ -51,6 +54,7 @@ PrimordialSea.pck と licenses フォルダを同じ場所に残してくださ�
 
 目標: 浅瀬で金属片2個、艇の残骸で航法ユニットを回収し、ポッドで航法を復旧。
 本開発版は「航法復旧編」まで。全編の帰還は今後の範囲です。
+今回の改善: 浅瀬から東の帆殻獣へ近づき、殻と三本脚を観察し、腹側で並走。
 
 WASD:泳ぐ / Space:上昇 / C:下降 / Shift:加速 / マウス:視点
 E:調べる・拾う / 左クリック:道具 / Q:緊急パルス / F:ライト
@@ -74,9 +78,11 @@ if git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
 fi
 {
   echo 'Game: Primordial Sea / 原初の海 航法復旧編'
-  echo 'Game version: 0.1.0-m1'
+  echo 'Game version: 0.1.5-m1.5'
   printf 'Godot: %s\n' "$(tools/godot.sh --version)"
-  printf 'Source commit: %s\n' "$commit"
+  printf 'Implementation branch head: %s\n' "${PRIMORDIAL_SOURCE_COMMIT:-$commit}"
+  printf 'Build checkout commit (may be PR merge commit): %s\n' "$commit"
+  printf 'CI event: %s\n' "${GITHUB_EVENT_NAME:-local}"
   printf 'Source tree: %s\n' "$source_state"
   date -u '+Built UTC: %Y-%m-%dT%H:%M:%SZ'
   echo 'Target: Windows x86_64 / Compatibility renderer / unsigned release export'

@@ -5,6 +5,8 @@
 - 操作・進行・保存は `scripts/game.gd` が接続し、地形、プレイヤー、生態、UI、音は各担当スクリプトへ分離する。
 - 生態の時間は `ecosystem.tick(delta)` から進める。ポーズ・フォーカス喪失中に壁時計で酸素やAIを進めない。
 - 本編の回帰確認は `tools/verify.sh`、配布候補は `tools/export_windows.sh`。画面は `tools/capture_visuals.sh`。成功マーカーとエラーログを両方検査する。
+- M1.5の比較は `tools/capture_comparison.sh`。基準commitの本編から同条件画像を再生成し、通常Input・実衝突で遭遇と休息の映像を収録する。静止配置、オフライン収録、実時間計測を混同しない。
+- ホガラ素材の制作元と再生成手順は `docs/ASSET_PIPELINE.md`。GLBとPNGはコミットし、通常のverify/exportではBlenderを要求しない。gaitの接地・退出試験もverify入口に含める。
 - 通常セーブをテストで変更しない。テスト用 SaveStore.directory を設定する。重要品の回収・保管・修理の一意性を維持する。
 - 生成音は `tools/generate_assets.py` から再現する。エンジン、templates、`.godot/`、`build/`、実行ファイルはコミットしない。`.gd.uid` は保存する。
 - import、ロジック試験、実描画の目視、Windows実機確認を区別して報告する。未実施の品質確認を合格としない。

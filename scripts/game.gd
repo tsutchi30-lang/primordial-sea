@@ -40,6 +40,8 @@ var death_reason := ""
 var buoy_material: StandardMaterial3D
 var shake_time := 0.0
 var quitting := false
+var pending_checkpoint_action := ""
+var checkpoint_error := ""
 
 func _ready() -> void:
 	process_mode = Node.PROCESS_MODE_ALWAYS
@@ -67,6 +69,7 @@ func _ready() -> void:
 	sound.process_mode = Node.PROCESS_MODE_PAUSABLE
 	add_child(sound)
 	sound.apply_settings(settings)
+	ecology.footfall.connect(func(at: Vector3, strength: float): sound.play_footfall(at, strength))
 	_build_pickups()
 	hud = Interface.new()
 	add_child(hud)
@@ -177,8 +180,6 @@ func _physics_process(delta: float) -> void:
 		state.warned_15 = true
 		notify("酸素 15% — 帰投または浮上を。水面ではタンクは充填されません。", 7)
 		sound.play_effect("warning")
-	if state.oxygen <= 0 and not player.breathing_air:
-		hud.observation_label.text = "酸素切れ — 浮上してください！ 残り %.1f 秒" % maxf(0, 8 - state.anoxia)
 	if shake_time > 0:
 		shake_time = maxf(0, shake_time - delta)
 		player.camera.h_offset = sin(shake_time * 56) * shake_time * 0.045 * player.camera_shake
@@ -186,16 +187,20 @@ func _physics_process(delta: float) -> void:
 		player.camera.h_offset = 0
 
 func start_new_game() -> void:
-	state = Expedition.new()
+	var fresh = Expedition.new()
+	if not _save_checkpoint(fresh.checkpoint()):
+		show_title(saves.last_error)
+		return
+	state = fresh
 	observations = {}
 	tutorial_flags = {}
 	saves.write_json("observations", {})
-	state.deposit()
-	_save_checkpoint()
 	_begin_at_pod()
 	notify("転移事故で調査艇を喪失。まず浅瀬の金属片 2 個と、艇の航法ユニットを回収してください。", 13)
 
 func _begin_at_pod() -> void:
+	pending_checkpoint_action = ""
+	checkpoint_error = ""
 	mode = "play"
 	player.relocate(POD, true)
 	ecology.reset()
@@ -217,9 +222,9 @@ func load_game() -> bool:
 	notify("ポッドの保存点から再開しました。補給・修復は完了しています。")
 	return true
 
-func _save_checkpoint() -> bool:
-	var data: Dictionary = state.checkpoint()
-	if saves.write_json("checkpoint", data):
+func _save_checkpoint(candidate: Dictionary = {}) -> bool:
+	var data: Dictionary = state.checkpoint() if candidate.is_empty() else candidate
+	if saves.save_checkpoint(data):
 		checkpoint = data.duplicate(true)
 		return true
 	notify(saves.last_error, 12)
@@ -228,8 +233,10 @@ func _save_checkpoint() -> bool:
 func depart_pod() -> bool:
 	if not player.in_pod or mode != "play":
 		return false
-	state.deposit()
-	if not _save_checkpoint():
+	if not pending_checkpoint_action.is_empty() and pending_checkpoint_action != "depart":
+		_show_save_failure(pending_checkpoint_action, checkpoint_error)
+		return false
+	if not _commit_deposit("depart"):
 		return false
 	player.relocate(EXIT, false)
 	resume_game()
@@ -240,24 +247,97 @@ func depart_pod() -> bool:
 func return_to_pod() -> bool:
 	if mode != "play" or player.in_pod or player.global_position.distance_to(ENTRY) > 7.0:
 		return false
-	# Deposit, objective transition and checkpoint form one transaction.
-	state.deposit()
+	# Enter safety and supply breathing/repairs even when storage is unavailable.
+	# Cargo remains carried until the complete candidate checkpoint is durable.
 	player.relocate(POD, true)
-	_save_checkpoint()
-	nav_unit.set_available(state.nav == "wreck")
+	state.refill()
 	sound.ambience(true, true)
+	return _finish_return()
+
+func _finish_return() -> bool:
+	if not _commit_deposit("return"):
+		return false
+	nav_unit.set_available(state.nav == "wreck")
+	resume_game()
 	sound.play_effect("pickup")
 	notify("帰投完了。資材を保管し、酸素・スーツ・道具を補給しました。", 8)
 	return true
 
 func repair_navigation() -> bool:
-	if mode != "play" or not player.in_pod or not state.repair():
+	if mode != "play" or not player.in_pod:
+		return false
+	if not pending_checkpoint_action.is_empty() and pending_checkpoint_action != "repair":
+		_show_save_failure(pending_checkpoint_action, checkpoint_error)
+		return false
+	var candidate = Expedition.new()
+	candidate.restore(state.checkpoint())
+	if not candidate.repair():
 		notify("航法ユニット 1 個と、保管済みの金属片 2 個が必要です。")
 		return false
-	_save_checkpoint()
+	if not _save_checkpoint(candidate.checkpoint()):
+		_show_save_failure("repair", saves.last_error)
+		return false
+	state.repair()
+	pending_checkpoint_action = ""
+	checkpoint_error = ""
 	sound.play_effect("success")
 	pause_game("complete")
 	return true
+
+func _commit_deposit(action: String) -> bool:
+	var candidate = Expedition.new()
+	candidate.restore(state.checkpoint())
+	candidate.nav = state.nav
+	candidate.carried_metal = state.carried_metal
+	if not candidate.deposit():
+		_show_save_failure(action, "金属片の保管上限は %d 個です。超過した携行品も失われていません。" % Expedition.MAX_STORED_METAL)
+		return false
+	if not _save_checkpoint(candidate.checkpoint()):
+		_show_save_failure(action, saves.last_error)
+		return false
+	# No live progression or consumable changes precede durable replacement.
+	state.deposit()
+	pending_checkpoint_action = ""
+	checkpoint_error = ""
+	return true
+
+func upgrade_tank() -> bool:
+	if mode != "play" or not player.in_pod:
+		return false
+	if not pending_checkpoint_action.is_empty() and pending_checkpoint_action != "upgrade":
+		_show_save_failure(pending_checkpoint_action, checkpoint_error)
+		return false
+	var candidate = Expedition.new()
+	candidate.restore(state.checkpoint())
+	if not candidate.upgrade_tank():
+		return false
+	if not _save_checkpoint(candidate.checkpoint()):
+		_show_save_failure("upgrade", saves.last_error)
+		return false
+	state.upgrade_tank()
+	pending_checkpoint_action = ""
+	checkpoint_error = ""
+	_show_pod()
+	return true
+
+func _show_save_failure(action: String, message: String) -> void:
+	pending_checkpoint_action = action
+	checkpoint_error = message
+	_stop_play()
+	var detail := "ポッド内は安全です。保管は未確定で、携行資材と航法ユニットを保持しています。"
+	if action == "repair":
+		detail = "航法修理は未確定です。金属片と航法ユニットは消費していません。"
+	elif action == "upgrade":
+		detail = "タンク改良は未確定です。金属片は消費していません。"
+	hud.show_panel("save_failed", "保存できませんでした", message + "\n\n" + detail + "\n以前の正常な保存点は保持されています。保存先を確認してから再試行してください。\nタイトルへ戻ると、未保存の進行は失われます。", [["保存を再試行", "retry_save"], ["タイトルへ（前の保存点から再開）", "title"]])
+
+func retry_checkpoint() -> bool:
+	match pending_checkpoint_action:
+		"return": return _finish_return()
+		"depart": return depart_pod()
+		"repair": return repair_navigation()
+		"upgrade": return upgrade_tank()
+	return false
 
 func die(reason: String) -> void:
 	if mode != "play":
@@ -270,6 +350,8 @@ func die(reason: String) -> void:
 	hud.show_panel("dead", "救難信号を受信", reason + "\n持ち帰っていない資材は失われます。未保管の航法ユニットは艇へ戻ります。\n観察記録は保持されます。", [["最後のポッド保存点から再出発", "retry"], ["タイトルへ", "title"]])
 
 func show_title(message := "") -> void:
+	pending_checkpoint_action = ""
+	checkpoint_error = ""
 	mode = "title"
 	_stop_play()
 	sound.ambience(true, false)
@@ -290,6 +372,9 @@ func _stop_play() -> void:
 func pause_game(page := "pause") -> void:
 	if mode != "play":
 		return
+	if not pending_checkpoint_action.is_empty():
+		_show_save_failure(pending_checkpoint_action, checkpoint_error)
+		return
 	_stop_play()
 	if page == "journal":
 		_show_journal()
@@ -302,6 +387,9 @@ func pause_game(page := "pause") -> void:
 
 func resume_game() -> void:
 	if mode != "play":
+		return
+	if not pending_checkpoint_action.is_empty():
+		_show_save_failure(pending_checkpoint_action, checkpoint_error)
 		return
 	player.clear_input()
 	use_lock = 0.25
@@ -349,14 +437,12 @@ func _on_action(action: String) -> void:
 				start_new_game()
 		"confirm_new": start_new_game()
 		"continue", "retry": load_game()
+		"retry_save": retry_checkpoint()
 		"resume": resume_game()
 		"title": show_title()
 		"depart": depart_pod()
 		"repair": repair_navigation()
-		"upgrade":
-			if state.upgrade_tank():
-				_save_checkpoint()
-			_show_pod()
+		"upgrade": upgrade_tank()
 		"journal": pause_game("journal")
 		"settings":
 			previous_settings_page = hud.page
@@ -442,7 +528,8 @@ func interact() -> void:
 	if player.in_pod:
 		pause_game("pod")
 		return
-	if return_to_pod():
+	if player.global_position.distance_to(ENTRY) <= 7.0:
+		return_to_pod()
 		return
 	var target = current_target()
 	if target:
@@ -465,8 +552,11 @@ func collect_target(target) -> bool:
 			if not state.collect_nav(): return false
 			notify("航法ユニットを回収。ポッドへ持ち帰って保管してください。", 8)
 		"metal":
-			if state.carried_metal >= 12:
+			if state.carried_metal >= Expedition.CARRIED_METAL_LIMIT:
 				notify("一般素材の携行枠がいっぱいです。ポッドへ保管しましょう。")
+				return false
+			if state.stored_metal + state.carried_metal >= Expedition.MAX_STORED_METAL:
+				notify("金属片の保管上限は %d 個です。修理や整備で使うと回収できます。この素材は残しておきます。" % Expedition.MAX_STORED_METAL, 8)
 				return false
 			state.carried_metal += 1
 			notify("金属片を回収（携行 %d）。ポッドに戻ると保管されます。" % state.carried_metal)

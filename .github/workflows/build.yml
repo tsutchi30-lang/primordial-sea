@@ -14,18 +14,24 @@ permissions:
   contents: read
 
 concurrency:
-  group: windows-m1-${{ github.workflow }}-${{ github.ref }}
+  group: windows-m1-5-${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
+
+env:
+  PRIMORDIAL_SOURCE_COMMIT: ${{ github.event.pull_request.head.sha || github.sha }}
+  PRIMORDIAL_BUILD_COMMIT: ${{ github.sha }}
+  LIBGL_ALWAYS_SOFTWARE: '1'
 
 jobs:
   windows:
     runs-on: ubuntu-24.04
-    timeout-minutes: 30
+    timeout-minutes: 45
     steps:
-      # Official tags resolved and action manifests checked on 2026-10-10.
+      # Full history is needed to reconstruct exact M1 comparison commit 7a23754.
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
         with:
           persist-credentials: false
+          fetch-depth: 0
       - name: Prepare, import, verify and export
         run: tools/export_windows.sh
       - name: Artifact identity
@@ -34,11 +40,26 @@ jobs:
       - name: Windows development artifact
         uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
         with:
-          name: PRIMORDIAL_SEA_Windows_M1_${{ steps.identity.outputs.short_commit }}
+          name: PRIMORDIAL_SEA_Windows_M1_5_${{ steps.identity.outputs.short_commit }}
           path: build/windows/
           if-no-files-found: error
           retention-days: 7
           compression-level: 6
+      - name: Install software-render and video tools
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends xvfb xauth libgl1-mesa-dri mesa-utils ffmpeg python3-pil
+      - name: Recreate baseline and capture M1.5 visuals and live replay
+        run: tools/capture_comparison.sh
+      - name: Visual evidence and conditions
+        if: always()
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
+        with:
+          name: PRIMORDIAL_SEA_Visuals_M1_5_${{ steps.identity.outputs.short_commit }}
+          path: build/m1-5/
+          if-no-files-found: error
+          retention-days: 7
+          compression-level: 1
       - name: Verification logs
         if: always()
         uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
