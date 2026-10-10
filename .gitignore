@@ -1,0 +1,10 @@
+.godot/
+.tools/
+build/
+*.tmp
+*.log
+__pycache__/
+# WAV sources are generated deterministically before every import.
+assets/audio/*.wav
+.DS_Store
+Thumbs.db
