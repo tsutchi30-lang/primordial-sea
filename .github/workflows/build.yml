@@ -1,0 +1,49 @@
+name: Windows development build
+
+on:
+  pull_request:
+    paths-ignore:
+      - '**.md'
+  push:
+    branches: [main]
+    paths-ignore:
+      - '**.md'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: windows-m1-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  windows:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      # Official tags resolved and action manifests checked on 2026-10-10.
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          persist-credentials: false
+      - name: Prepare, import, verify and export
+        run: tools/export_windows.sh
+      - name: Artifact identity
+        id: identity
+        run: echo "short_commit=$(git rev-parse --short=8 HEAD)" >> "$GITHUB_OUTPUT"
+      - name: Windows development artifact
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
+        with:
+          name: PRIMORDIAL_SEA_Windows_M1_${{ steps.identity.outputs.short_commit }}
+          path: build/windows/
+          if-no-files-found: error
+          retention-days: 7
+          compression-level: 6
+      - name: Verification logs
+        if: always()
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
+        with:
+          name: verification-logs-${{ github.run_id }}-${{ github.run_attempt }}
+          path: build/logs/
+          if-no-files-found: error
+          retention-days: 7
