@@ -3,6 +3,8 @@ extends Node
 var loops: Dictionary = {}
 var effects: Dictionary = {}
 var footfall_player: AudioStreamPlayer3D
+var resonance_players: Array[AudioStreamPlayer3D] = []
+var resonance_index := 0
 
 func _exit_tree() -> void:
 	stop_all()
@@ -41,6 +43,26 @@ func _ready() -> void:
 	footfall_player.max_distance = 24.0
 	footfall_player.volume_db = -7.0
 	add_child(footfall_player)
+	for i in 4:
+		var resonator := AudioStreamPlayer3D.new()
+		resonator.stream = load("res://assets/audio/resonance.wav")
+		resonator.bus = "SFX"
+		resonator.unit_size = 5.0
+		resonator.max_distance = 22.0
+		add_child(resonator)
+		resonance_players.append(resonator)
+
+func play_resonance(at: Vector3, strength: float, pitch := 1.0) -> void:
+	var resonator := resonance_players[resonance_index]
+	resonance_index = (resonance_index + 1) % resonance_players.size()
+	resonator.global_position = at
+	resonator.pitch_scale = pitch
+	resonator.volume_db = linear_to_db(clampf(strength, 0.1, 1.0)) - 4.0
+	resonator.play()
+
+func set_stabilized(value: bool) -> void:
+	if loops.has("pod_hum"):
+		loops.pod_hum.volume_db = -7.0 if value else 0.0
 
 func play_footfall(at: Vector3, strength: float) -> void:
 	# A single muted contact pulse per planted step; never a continuous smoke/rumble.

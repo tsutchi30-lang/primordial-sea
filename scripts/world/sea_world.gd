@@ -3,12 +3,14 @@ extends Node3D
 ## Layer 1 is real terrain and structures; creature shelters use their own layer.
 
 const WORLD_SEED := 503171
-const MAP_MIN := Vector2(-120.0, -190.0)
-const MAP_MAX := Vector2(120.0, 60.0)
+const WorldMap = preload("res://data/biomes/world_map.gd")
+const MAP_MIN := WorldMap.MAP_MIN
+const MAP_MAX := WorldMap.MAP_MAX
 const TERRAIN_STEP := 3.0
 const POD_ENTRY := Vector3(0, -2, -5)
 const WRECK_CENTER := Vector3(0, -39.2, -133)
 const EncounterDressing = preload("res://scripts/world/encounter_dressing.gd")
+const M2Dressing = preload("res://scripts/world/m2_dressing.gd")
 
 var environment: Environment
 var _built := false
@@ -18,11 +20,15 @@ var _sand_material: ShaderMaterial
 var _sponge_material: ShaderMaterial
 var _water_material: ShaderMaterial
 var _pod_light: OmniLight3D
+var _stability_material: StandardMaterial3D
+var _stabilized := false
 var _sun: DirectionalLight3D
 var _fill: DirectionalLight3D
 var _particles: CPUParticles3D
 var _last_underwater := false
 var _last_depth := -100.0
+var _last_biome := ""
+var m2_dressing: Node3D
 var visual_time := 0.0
 
 
@@ -53,9 +59,31 @@ func setup() -> void:
 	_build_pod()
 	_build_wreck()
 	_build_particles()
+	m2_dressing = M2Dressing.new()
+	add_child(m2_dressing)
+	m2_dressing.setup(self)
 
 
 func floor_height(x: float, z: float) -> float:
+	if z >= -150.0:
+		return _m1_floor_height(x, z)
+	var distance := -z
+	var bottom := -lerpf(46.0, 62.0, smoothstep(150.0, 185.0, distance))
+	if distance > 185.0:
+		bottom = -lerpf(62.0, 101.0, smoothstep(185.0, 285.0, distance))
+	if distance > 285.0:
+		bottom = -lerpf(101.0, 121.0, smoothstep(285.0, 315.0, distance))
+	if distance > 315.0:
+		bottom = -lerpf(121.0, 157.0, smoothstep(315.0, 430.0, distance))
+	bottom += sin(x * 0.057 + z * 0.044) * 0.8 + cos(z * 0.11) * 0.28
+	bottom += sin(x * 0.17) * sin(z * 0.09) * 0.22
+	# A broad shelf joins the unchanged M1 bed. The old southern ridge opens here.
+	bottom = lerpf(_m1_floor_height(x, -150.0), bottom, smoothstep(150.0, 170.0, distance))
+	var edge := maxf(smoothstep(125.0, MAP_MAX.x, absf(x)), smoothstep(430.0, -MAP_MIN.y, distance))
+	return lerpf(bottom, bottom + 28.0 + sin(x * 0.1 + z * 0.08) * 2.0, edge)
+
+
+func _m1_floor_height(x: float, z: float) -> float:
 	var depth := clampf(-z, 0.0, 155.0)
 	var bottom := -10.0 - depth * 0.24
 	bottom += sin(x * 0.095 + z * 0.061) * 1.0 + cos(z * 0.14) * 0.45
@@ -71,6 +99,7 @@ func floor_height(x: float, z: float) -> float:
 func _process(delta: float) -> void:
 	# The world is PAUSABLE. Water/light movement therefore follows game time too.
 	visual_time += delta
+	_update_pod_stability()
 	_sand_material.set_shader_parameter("sea_time", visual_time)
 	_water_material.set_shader_parameter("sea_time", visual_time)
 	var camera := get_viewport().get_camera_3d()
@@ -78,15 +107,32 @@ func _process(delta: float) -> void:
 		return
 	var underwater := camera.global_position.y < -0.12
 	var depth := maxf(0.0, -camera.global_position.y)
-	if underwater != _last_underwater or absf(depth - _last_depth) > 0.15:
+	var biome := WorldMap.id_at(camera.global_position)
+	if underwater != _last_underwater or absf(depth - _last_depth) > 0.15 or biome != _last_biome:
 		_last_underwater = underwater
 		_last_depth = depth
-		_set_water_environment(underwater, depth)
+		_last_biome = biome
+		_set_water_environment(underwater, depth, camera.global_position.z)
 
 
 func set_low_particles(low: bool) -> void:
 	if _particles != null:
 		_particles.amount = 45 if low else 140
+	if is_instance_valid(m2_dressing):
+		m2_dressing.set_low_particles(low)
+
+
+func set_stabilized(value: bool) -> void:
+	_stabilized = value
+	_update_pod_stability()
+
+
+func _update_pod_stability() -> void:
+	var pulse := 1.0 if _stabilized else 0.92 + sin(visual_time * 1.7) * 0.05 + sin(visual_time * 4.3) * 0.025
+	if _pod_light != null:
+		_pod_light.light_energy = pulse
+	if _stability_material != null:
+		_stability_material.emission_energy_multiplier = 0.7 if _stabilized else pulse * 0.52
 
 
 func _build_environment() -> void:
@@ -130,17 +176,18 @@ func _build_environment() -> void:
 	_fill.light_energy = 0.15
 	add_child(_fill)
 	var surface := PlaneMesh.new()
-	surface.size = Vector2(290, 290)
+	surface.size = MAP_MAX - MAP_MIN + Vector2(40, 40)
 	surface.subdivide_width = 48
 	surface.subdivide_depth = 48
 	_water_material = ShaderMaterial.new()
 	_water_material.shader = preload("res://assets/shaders/water_surface.gdshader")
-	var water := _mesh(surface, _water_material, Vector3(0, 0, -60))
+	var midpoint := (MAP_MIN + MAP_MAX) * 0.5
+	var water := _mesh(surface, _water_material, Vector3(midpoint.x, 0, midpoint.y))
 	water.name = "BreathableWaterSurface"
 	water.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 
 
-func _set_water_environment(underwater: bool, depth: float = 0.0) -> void:
+func _set_water_environment(underwater: bool, depth: float = 0.0, z: float = 0.0) -> void:
 	# Slowly lose warm sunlight down the shelf, retaining enough fill to read
 	# unlit creature silhouettes. No sudden biome or fog transition during a dive.
 	var deep := smoothstep(10.0, 43.0, depth) if underwater else 0.0
@@ -157,24 +204,36 @@ func _set_water_environment(underwater: bool, depth: float = 0.0) -> void:
 		_sun.light_color = Color("f4f1df").lerp(Color("a5d2d5"), deep)
 	if _fill != null:
 		_fill.light_energy = lerpf(0.17, 0.19, deep)
+	if underwater and z < -150.0:
+		var plain := smoothstep(150.0, 192.0, -z)
+		var graveyard := smoothstep(290.0, 320.0, -z)
+		environment.fog_density = lerpf(environment.fog_density, lerpf(0.024, 0.020, graveyard), plain)
+		environment.fog_light_color = environment.fog_light_color.lerp(Color("526e72").lerp(Color("264859"), graveyard), plain)
+		environment.ambient_light_energy = lerpf(environment.ambient_light_energy, lerpf(0.34, 0.30, graveyard), plain)
+		if _sun != null:
+			_sun.light_energy = lerpf(_sun.light_energy, lerpf(0.38, 0.23, graveyard), plain)
 
 
 func _build_seabed() -> void:
 	var surface := SurfaceTool.new()
 	surface.begin(Mesh.PRIMITIVE_TRIANGLES)
+	var expanded := SurfaceTool.new()
+	expanded.begin(Mesh.PRIMITIVE_TRIANGLES)
 	var x_count := int((MAP_MAX.x - MAP_MIN.x) / TERRAIN_STEP)
-	var z_count := int((MAP_MAX.y - MAP_MIN.y) / TERRAIN_STEP)
+	var z_count := ceili((MAP_MAX.y - MAP_MIN.y) / TERRAIN_STEP)
 	for zi in range(z_count):
 		for xi in range(x_count):
 			var x := MAP_MIN.x + xi * TERRAIN_STEP
 			var z := MAP_MIN.y + zi * TERRAIN_STEP
-			var corners: Array[Vector2] = [Vector2(x, z), Vector2(x, z + TERRAIN_STEP), Vector2(x + TERRAIN_STEP, z), Vector2(x + TERRAIN_STEP, z + TERRAIN_STEP)]
+			var next_z := minf(MAP_MAX.y, z + TERRAIN_STEP)
+			var bed := expanded if z < -151.0 else surface
+			var corners: Array[Vector2] = [Vector2(x, z), Vector2(x, next_z), Vector2(x + TERRAIN_STEP, z), Vector2(x + TERRAIN_STEP, next_z)]
 			for index in [0, 2, 1, 2, 3, 1]:
 				var p := corners[index]
 				var color_mix := (sin(p.x * 0.105 + p.y * 0.06) + sin(p.y * 0.17)) * 0.12 + 0.4
-				surface.set_color(Color("d7d0ba").lerp(Color("909a92"), color_mix).srgb_to_linear())
-				surface.set_uv(p * 0.1)
-				surface.add_vertex(Vector3(p.x, floor_height(p.x, p.y), p.y))
+				bed.set_color(Color("d7d0ba").lerp(Color("909a92"), color_mix).srgb_to_linear())
+				bed.set_uv(p * 0.1)
+				bed.add_vertex(Vector3(p.x, floor_height(p.x, p.y), p.y))
 	surface.index()
 	surface.generate_normals()
 	surface.generate_tangents()
@@ -182,6 +241,13 @@ func _build_seabed() -> void:
 	var terrain := _mesh(terrain_mesh, _sand_material, Vector3.ZERO)
 	terrain.name = "SculptedSeabed"
 	_add_mesh_collision(terrain_mesh, Transform3D.IDENTITY, "SeabedCollision", false)
+	expanded.index()
+	expanded.generate_normals()
+	expanded.generate_tangents()
+	var new_bed := expanded.commit()
+	var extension := _mesh(new_bed, M2Dressing.bed_material(), Vector3.ZERO)
+	extension.name = "M2MudAndShellBed"
+	_add_mesh_collision(new_bed, Transform3D.IDENTITY, "M2SeabedCollision", false)
 
 
 func _build_rocks() -> void:
@@ -200,7 +266,10 @@ func _build_rocks() -> void:
 		var angle := float(index) / 56.0 * TAU
 		var x := cos(angle) * 111.0
 		var z := -64.0 + sin(angle) * 117.0
-		_rock(Vector3(x, floor_height(x, z) + 3.0, z), Vector3(_rng.randf_range(7, 12), _rng.randf_range(7, 16), _rng.randf_range(6, 10)))
+		var dimensions := Vector3(_rng.randf_range(7, 12), _rng.randf_range(7, 16), _rng.randf_range(6, 10))
+		# Consume the exact M1 random sequence, opening only its former south rim.
+		if z >= -150.0:
+			_rock(Vector3(x, floor_height(x, z) + 3.0, z), dimensions)
 	for index in range(40):
 		var x := _rng.randf_range(-68, 70)
 		var z := _rng.randf_range(-153, 10)
@@ -379,7 +448,8 @@ func _build_pod() -> void:
 	# Fixed maintenance terminal, centred in the first-person starting view.
 	_box(Vector3(0, 0.78, -2.2), Vector3(2.3, 1.2, 0.85), trim, true)
 	_box(Vector3(0, 1.50, -2.23), Vector3(2.3, 0.85, 0.16), dark, true)
-	_box(Vector3(0, 1.53, -2.135), Vector3(2.06, 0.59, 0.015), _material(Color("09393e"), 0.4, 0.0, Color("104d54")))
+	_stability_material = _material(Color("09393e"), 0.4, 0.0, Color("104d54"))
+	_box(Vector3(0, 1.53, -2.135), Vector3(2.06, 0.59, 0.015), _stability_material)
 	for index in range(3):
 		var color := cyan if index == 0 else coral
 		_box(Vector3(-0.85, 1.7 - index * 0.18, -2.12), Vector3(0.08, 0.07, 0.02), color)

@@ -4,19 +4,26 @@ var kind := "metal"
 var title := "金属片"
 var available := true
 var replenish := 0.0
+var renewable := true
+var source_id := ""
+var being_carried := false
+var home := Vector3.ZERO
 var mesh: MeshInstance3D
 var marker: Label3D
 
 func _ready() -> void:
+	home = position
+	if kind in ["nav", "damping_frame", "phase_regulator"]:
+		renewable = false
 	mesh = MeshInstance3D.new()
 	var material := StandardMaterial3D.new()
-	material.albedo_color = Color("e5ac6a") if kind == "metal" else Color("73e7dc")
+	material.albedo_color = {"metal": Color("e5ac6a"), "repair_fiber": Color("d7ece1"), "shell_plate": Color("c4a48e"), "damping_frame": Color("f2ce88"), "phase_regulator": Color("9bbfff")}.get(kind, Color("73e7dc"))
 	material.metallic = 0.65
 	material.roughness = 0.3
 	material.emission_enabled = true
 	material.emission = material.albedo_color
 	material.emission_energy_multiplier = 0.35
-	if kind == "nav":
+	if kind in ["nav", "damping_frame", "phase_regulator"]:
 		var box := BoxMesh.new()
 		box.size = Vector3(0.65, 0.4, 0.85)
 		mesh.mesh = box
@@ -32,7 +39,7 @@ func _ready() -> void:
 	mesh.material_override = material
 	mesh.rotation_degrees = Vector3(10, 25, -15)
 	add_child(mesh)
-	if kind == "nav":
+	if kind in ["nav", "damping_frame", "phase_regulator"]:
 		for x in [-0.25, 0.25]:
 			var ring := MeshInstance3D.new()
 			var tube := CylinderMesh.new()
@@ -45,7 +52,7 @@ func _ready() -> void:
 			add_child(ring)
 	marker = Label3D.new()
 	marker.font = load("res://assets/fonts/NotoSansCJK-Regular.ttc")
-	marker.text = "回収信号" if kind == "nav" else "採集可"
+	marker.text = title if kind in ["nav", "damping_frame", "phase_regulator"] else "採集可"
 	marker.font_size = 28
 	marker.pixel_size = 0.008
 	marker.modulate = material.albedo_color
@@ -59,7 +66,9 @@ func set_available(value: bool) -> void:
 	visible = value
 
 func tick(delta: float) -> void:
-	if not available and kind != "nav":
+	if being_carried:
+		return
+	if not available and renewable:
 		replenish -= delta
 		if replenish <= 0:
 			set_available(true)

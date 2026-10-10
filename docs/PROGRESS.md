@@ -1,6 +1,35 @@
-# M0＋M1 / M1.5 実装・検証記録
+# M0＋M1 / M1.5 / M2 実装・検証記録
 
-## 現在のM1.5改善
+
+## 現在のM2 — 装置安定化まで実装・共通検証済み
+
+最新M1.5 `5b6aefbd92da3381b703b8cd9f4d75d042b967d8` から `codex/m2-ecology-expansion` を作成。M1.5 PR #2 は未マージのため、そのブランチをbaseとする積み重ねPRです。
+
+白濁の平原では刃葉虫の採餌で開いた網を通り、残った網に窓喰いを誘導できます。殻の墓場では共鳴壺の有限な音の連鎖で六面這いが離れた通路を通り、空殻から位相調整器を回収できます。制振フレームと合わせてポッドに保管し、保存成功後に装置安定化が完了します。固定中継、追加7種、任意のタンクIIとカッター改良、6ブイ、14種の図鑑、schema2と旧保存移行を実装しました。仕様と調整値は [M2_IMPLEMENTATION.md](M2_IMPLEMENTATION.md)、受入は [M2_ACCEPTANCE.md](M2_ACCEPTANCE.md) を参照してください。
+
+2026-10-10のGodot4.7.2による共通 `tools/export_windows.sh` は終了0で成功。import、M1 smoke172、歩容30、移行67、進行134、UI60、平原30、墓場34、古生物36、地形28、M1ポッド経路、M2入力経路89項目を通過し、Windows AMD64 EXE/PCKを生成しました。通常Inputで基本装備・誘餌/パルス0の10区間を走行し、最少の補給前酸素は328.85秒/480秒（68.51%）でした。墓場の入力probeでは六面這いが離れた同じ低い入口を通過してEで回収し、東側出口から退出しました。
+
+720pの代表16画面を本編から生成し、全体一覧および図鑑・端末・古生物の原寸で目視しました。日本語の欠落やパネル外への文字は見られず、二海域の輪郭とランドマークを確認しました。静止配置による画像であり、経路の証拠は別の入力走行です。正式な720p/1080p各16枚と二動画各50.375秒を生成し、全画像一覧・主要原寸、動画の全区間と重要場面のフレーム列を目視しました。墓場は同じ低い入口への進入・E回収・側面退出を確認。Linux llvmpipeの独立1080p計測は平均143.521ms、p95 163.327msです。詳細な条件は受入表とmanifestに記録します。
+
+統合時に、航法修理後の新目標、保存取引候補への携行状態の保持、JSON整数比較、カメラ平面上のブイ投影、ホガラ上方の入力経路、六面這いの斜面移動と15秒内の復帰を確認・修正しました。M1.5のモデル資産は変更していません。
+
+Windows OS上の起動・物理マウス・Alt+Tab・音の聴取・実GPU性能、人の初見通しプレイは未確認です。確認手順は [PLAYTEST.md](PLAYTEST.md)。M3と全編帰還は未実装です。
+
+### M2の引き渡し（2026-10-10）
+
+- 作業ブランチ `codex/m2-ecology-expansion`、実装commit `0369240e4f6938d6726cf0d6623f55d25998d972`。[Draft PR #3](https://github.com/tsutchi30-lang/primordial-sea/pull/3) は未マージの #2 に依存し、baseは `codex/m1-5-visual-pass`。
+- [CI run 38059702704](https://github.com/tsutchi30-lang/primordial-sea/actions/runs/38059702704) は空checkoutから全検証・Windows export・32画面・二動画・独立性能計測・artifactアップロードまで全工程成功。jobログも取得して成功markerとソース191入力の不変性を照合。
+- [Windows開発版](https://github.com/tsutchi30-lang/primordial-sea/actions/runs/38059702704/artifacts/11672747591)：`PRIMORDIAL_SEA_Windows_M2_0758fbe5`、67,101,359 bytes、2026-10-17 14:31:05 UTCまで。
+- [画像・映像・経路・条件](https://github.com/tsutchi30-lang/primordial-sea/actions/runs/38059702704/artifacts/11672403942)：`PRIMORDIAL_SEA_M2_Evidence_0758fbe5`、72,788,860 bytes、2026-10-17 14:39:27 UTCまで。
+- [CI検証ログ](https://github.com/tsutchi30-lang/primordial-sea/actions/runs/38059702704/artifacts/11672224257)：`verification-logs-38059702704-1`、9,908 bytes、2026-10-17 14:39:31 UTCまで。
+- artifact末尾 `0758fbe5` はPR検証用merge commitで、実装head `0369240` と区別。Windows ZIPにEXE/PCK、説明・旧保存手順、ライセンス、検証結果、BUILD_INFO、SHA256を含みます。取得にはGitHubログインが必要な場合があります。
+- 目視したローカル原寸・映像・manifestは `build/m2/`。CI画像は生成とログを確認し、別途全件目視したとは扱いません。ローカル `build/windows/` はcommit前の統合試作なので、配布用には上のCI artifactを使用してください。
+- 最新の目視・CI結果と取得先の追記は文書のみの後続commit。CI artifact内の文書はビルド時点の記録です。現在の受入表と併せて確認してください。mainへのマージと公開Releaseは行っていません。
+
+以下のM1.5/M1成果物と確認結果は過去版の履歴です。M2の成果物と混同しません。
+
+
+## M1.5改善の履歴
 
 起点はM1の `7a2375487f39cdb17356c795cb7a6a8659b622ba`。専用モデルを通常本編へ組み込み、厚い殻・欠けた帆・節のある三脚・板状の肋・腹側の濾過房を作りました。各足の接地、体重移動、遅れて動く帆と濾過房、足元の砂と低い接地音を追加しています。遭遇区間の砂、岩、海綿、局所的な殻片を整えました。
 
