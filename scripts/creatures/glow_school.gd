@@ -20,6 +20,13 @@ func setup(at: Vector3, phase: float = 0.0) -> void:
 	home = at
 	age = phase
 	var body_mat := Art.material(Color(0.55, 0.85, 0.85, 0.38), 0.0, true)
+	var halo := Art.material(Color(0.5, 0.95, 0.85, 0.25), 0.7, true)
+	# This halo is a distance cue, not the animal's body. Fade it near the lens
+	# so swimming through a school cannot cover the screen with its inner faces.
+	# The centimetre-scale organs remain visible through the observation tool.
+	halo.distance_fade_mode = BaseMaterial3D.DISTANCE_FADE_PIXEL_ALPHA
+	halo.distance_fade_min_distance = 0.10
+	halo.distance_fade_max_distance = 0.35
 	for i in 42:
 		var grain := Node3D.new()
 		var a := float(i) * 2.39996
@@ -31,7 +38,6 @@ func setup(at: Vector3, phase: float = 0.0) -> void:
 			Art.ellipsoid(grain, Vector3(sin(j * 2.1) * 0.003, cos(j * 2.1) * 0.003, (j - 1) * 0.005), Vector3.ONE * 0.0032, light_mat, 6)
 		# A small luminous halo communicates the school at swimming distance; the
 		# actual three organs and spiral are centimetre-sized under magnification.
-		var halo := Art.material(Color(0.5, 0.95, 0.85, 0.25), 0.7, true)
 		Art.ellipsoid(grain, Vector3.ZERO, Vector3.ONE * 0.042, halo, 6)
 		if i == 0:
 			representative = grain

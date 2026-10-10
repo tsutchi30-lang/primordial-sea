@@ -8,18 +8,22 @@ const MAP_MAX := Vector2(120.0, 60.0)
 const TERRAIN_STEP := 3.0
 const POD_ENTRY := Vector3(0, -2, -5)
 const WRECK_CENTER := Vector3(0, -39.2, -133)
+const EncounterDressing = preload("res://scripts/world/encounter_dressing.gd")
 
 var environment: Environment
 var _built := false
 var _rng := RandomNumberGenerator.new()
-var _rock_material: StandardMaterial3D
+var _rock_material: ShaderMaterial
 var _sand_material: ShaderMaterial
+var _sponge_material: ShaderMaterial
+var _water_material: ShaderMaterial
 var _pod_light: OmniLight3D
 var _sun: DirectionalLight3D
 var _fill: DirectionalLight3D
 var _particles: CPUParticles3D
 var _last_underwater := false
 var _last_depth := -100.0
+var visual_time := 0.0
 
 
 func _ready() -> void:
@@ -31,13 +35,21 @@ func setup() -> void:
 		return
 	_built = true
 	_rng.seed = WORLD_SEED
-	_rock_material = _material(Color("64766b"), 0.97)
+	_rock_material = ShaderMaterial.new()
+	_rock_material.shader = preload("res://assets/shaders/marine_surface.gdshader")
+	_rock_material.set_shader_parameter("base_color", Color("818c82"))
+	_rock_material.set_shader_parameter("porous", false)
+	_sponge_material = ShaderMaterial.new()
+	_sponge_material.shader = _rock_material.shader
+	_sponge_material.set_shader_parameter("porous", true)
+	_sponge_material.set_shader_parameter("use_vertex_color", true)
 	_sand_material = ShaderMaterial.new()
 	_sand_material.shader = preload("res://assets/shaders/seabed.gdshader")
 	_build_environment()
 	_build_seabed()
 	_build_rocks()
 	_build_gardens()
+	EncounterDressing.build(self)
 	_build_pod()
 	_build_wreck()
 	_build_particles()
@@ -56,7 +68,11 @@ func floor_height(x: float, z: float) -> float:
 	return lerpf(bottom, -1.8 + sin(x * 0.13 + z * 0.17) * 1.4, edge)
 
 
-func _process(_delta: float) -> void:
+func _process(delta: float) -> void:
+	# The world is PAUSABLE. Water/light movement therefore follows game time too.
+	visual_time += delta
+	_sand_material.set_shader_parameter("sea_time", visual_time)
+	_water_material.set_shader_parameter("sea_time", visual_time)
 	var camera := get_viewport().get_camera_3d()
 	if camera == null:
 		return
@@ -117,9 +133,9 @@ func _build_environment() -> void:
 	surface.size = Vector2(290, 290)
 	surface.subdivide_width = 48
 	surface.subdivide_depth = 48
-	var water_material := ShaderMaterial.new()
-	water_material.shader = preload("res://assets/shaders/water_surface.gdshader")
-	var water := _mesh(surface, water_material, Vector3(0, 0, -60))
+	_water_material = ShaderMaterial.new()
+	_water_material.shader = preload("res://assets/shaders/water_surface.gdshader")
+	var water := _mesh(surface, _water_material, Vector3(0, 0, -60))
 	water.name = "BreathableWaterSurface"
 	water.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 
@@ -128,18 +144,19 @@ func _set_water_environment(underwater: bool, depth: float = 0.0) -> void:
 	# Slowly lose warm sunlight down the shelf, retaining enough fill to read
 	# unlit creature silhouettes. No sudden biome or fog transition during a dive.
 	var deep := smoothstep(10.0, 43.0, depth) if underwater else 0.0
+	var immersion := smoothstep(0.0, 0.9, depth) if underwater else 0.0
 	environment.fog_enabled = underwater
-	environment.fog_density = lerpf(0.015, 0.023, deep) if underwater else 0.0
-	environment.fog_light_color = Color("248c91").lerp(Color("14576b"), deep)
-	environment.fog_light_energy = lerpf(0.68, 0.5, deep)
-	environment.ambient_light_color = Color("c4d2d1").lerp(Color("659caa"), deep)
-	environment.ambient_light_energy = lerpf(0.42, 0.32, deep) if underwater else 0.45
-	environment.background_energy_multiplier = lerpf(0.72, 0.4, deep) if underwater else 1.0
+	environment.fog_density = lerpf(0.011, 0.021, deep) * immersion
+	environment.fog_light_color = Color("438e97").lerp(Color("235e71"), deep)
+	environment.fog_light_energy = lerpf(0.61, 0.46, deep)
+	environment.ambient_light_color = Color("c4d2d1").lerp(Color("82a8b2"), deep)
+	environment.ambient_light_energy = lerpf(0.45, lerpf(0.44, 0.35, deep), immersion)
+	environment.background_energy_multiplier = lerpf(1.0, lerpf(0.65, 0.38, deep), immersion)
 	if _sun != null:
-		_sun.light_energy = lerpf(0.82, 0.34, deep) if underwater else 1.05
+		_sun.light_energy = lerpf(1.05, lerpf(0.92, 0.44, deep), immersion)
 		_sun.light_color = Color("f4f1df").lerp(Color("a5d2d5"), deep)
 	if _fill != null:
-		_fill.light_energy = lerpf(0.15, 0.17, deep)
+		_fill.light_energy = lerpf(0.17, 0.19, deep)
 
 
 func _build_seabed() -> void:
@@ -158,7 +175,9 @@ func _build_seabed() -> void:
 				surface.set_color(Color("d7d0ba").lerp(Color("909a92"), color_mix).srgb_to_linear())
 				surface.set_uv(p * 0.1)
 				surface.add_vertex(Vector3(p.x, floor_height(p.x, p.y), p.y))
+	surface.index()
 	surface.generate_normals()
+	surface.generate_tangents()
 	var terrain_mesh := surface.commit()
 	var terrain := _mesh(terrain_mesh, _sand_material, Vector3.ZERO)
 	terrain.name = "SculptedSeabed"
@@ -205,14 +224,19 @@ func _rock(position_at: Vector3, dimensions: Vector3) -> void:
 	var source := SphereMesh.new()
 	source.radius = 1.0
 	source.height = 2.0
-	source.radial_segments = 9
-	source.rings = 5
+	source.radial_segments = 18
+	source.rings = 10
 	var arrays := source.get_mesh_arrays()
 	var vertices: PackedVector3Array = arrays[Mesh.ARRAY_VERTEX]
 	for index in range(vertices.size()):
 		var v := vertices[index]
-		var irregular := 1.0 + 0.11 * sin(v.x * 8.0 + v.z * 5.0) * cos(v.y * 7.0)
-		vertices[index] = v * dimensions * irregular
+		# Broad broken shelves and smaller eroded cuts give rocks a geological form.
+		var irregular := 1.0 + 0.10 * sin(v.x * 7.0 + v.z * 4.0) * cos(v.y * 6.0)
+		var layer := sin(v.y * 10.0 + v.x * 1.3) * 0.05
+		v.x *= irregular + layer
+		v.z *= irregular - layer * 0.4
+		v.y = signf(v.y) * pow(absf(v.y), 0.88)
+		vertices[index] = v * dimensions
 	arrays[Mesh.ARRAY_VERTEX] = vertices
 	# Recalculate normals after the organic displacement.
 	var rock_mesh := ArrayMesh.new()
@@ -232,7 +256,7 @@ func _build_gardens() -> void:
 		var angle := index * 2.39
 		var x := 10.0 + cos(angle) * 2.5
 		var z := -44.0 + sin(angle) * 2.2
-		_sponge(Vector3(x, floor_height(x, z), z), 0.75 + index * 0.05, 3.0 + (index % 3) * 1.15, Color("ca9367"), index == 3)
+		_sponge(Vector3(x, floor_height(x, z), z), 0.62 + index * 0.05, 2.5 + (index % 3) * 0.72, Color("c5a17e"), index == 3)
 	# Small flat sponge at the hallucigenia observation site. It never buries the animal.
 	_sponge(Vector3(4, floor_height(4, -27) - 0.12, -27), 0.48, 0.22, Color("b49288"), false)
 	for p in [Vector2(-6, -18), Vector2(7, -23), Vector2(-6, -31), Vector2(7, -35), Vector2(-7, -42)]:
@@ -257,8 +281,8 @@ func _build_gardens() -> void:
 func _sponge(at: Vector3, radius: float, height: float, color: Color, collision: bool) -> void:
 	var surface := SurfaceTool.new()
 	surface.begin(Mesh.PRIMITIVE_TRIANGLES)
-	var rings := 6
-	var sides := 12
+	var rings := 12
+	var sides := 20
 	var phase := _rng.randf_range(0, TAU)
 	for inside in [false, true]:
 		for ring in range(rings):
@@ -270,11 +294,13 @@ func _sponge(at: Vector3, radius: float, height: float, color: Color, collision:
 					var shape := (0.65 + 0.3 * sin(t * PI * 0.65)) * radius
 					shape *= 0.69 if inside else 1.0
 					shape *= 1.0 + sin(angle * 3.0 + phase) * 0.09
+					shape *= 1.0 + sin(t * 13.0 + phase) * 0.045 + sin(angle * 5.0 + t * 2.0) * t * 0.025
 					var h := t * height + sin(angle * 3.0 + phase) * height * 0.035 * t
-					corners.append(Vector3(cos(angle) * shape + t * t * radius * 0.3, h, sin(angle) * shape))
+					corners.append(Vector3(cos(angle) * shape + t * t * radius * 0.3, h, sin(angle) * shape + sin(t * 2.3) * radius * 0.18))
 				var order: Array = [0, 1, 2, 1, 3, 2] if inside else [0, 2, 1, 1, 2, 3]
 				for index in order:
 					surface.set_color((color.darkened(0.23) if inside else color).srgb_to_linear())
+					surface.set_uv(Vector2(atan2(corners[index].z, corners[index].x) / TAU, corners[index].y / height))
 					surface.add_vertex(corners[index])
 	# Rolled lip connects the outside to the hollow interior, making the cup readable.
 	for side in range(sides):
@@ -282,17 +308,16 @@ func _sponge(at: Vector3, radius: float, height: float, color: Color, collision:
 		for offset in [Vector2(0, 1), Vector2(1, 1), Vector2(0, 0.69), Vector2(1, 0.69)]:
 			var angle: float = (side + offset.x) / sides * TAU
 			var shape: float = (0.65 + 0.3 * sin(PI * 0.65)) * radius * offset.y * (1.0 + sin(angle * 3.0 + phase) * 0.09)
-			corners.append(Vector3(cos(angle) * shape + radius * 0.3, height + sin(angle * 3.0 + phase) * height * 0.035, sin(angle) * shape))
+			shape *= 1.0 + sin(13.0 + phase) * 0.045 + sin(angle * 5.0 + 2.0) * 0.025
+			corners.append(Vector3(cos(angle) * shape + radius * 0.3, height + sin(angle * 3.0 + phase) * height * 0.035, sin(angle) * shape + sin(2.3) * radius * 0.18))
 		for index in [0, 1, 2, 1, 3, 2]:
 			surface.set_color(color.lightened(0.2).srgb_to_linear())
+			surface.set_uv(Vector2(float(side) / sides, 1.0))
 			surface.add_vertex(corners[index])
+	surface.index()
 	surface.generate_normals()
-	var material := StandardMaterial3D.new()
-	material.vertex_color_use_as_albedo = true
-	material.roughness = 0.94
-	material.cull_mode = BaseMaterial3D.CULL_DISABLED
 	var mesh := surface.commit()
-	var node := _mesh(mesh, material, at)
+	var node := _mesh(mesh, _sponge_material, at)
 	node.name = "HollowSponge"
 	if collision:
 		_add_mesh_collision(mesh, Transform3D(Basis.IDENTITY, at), "SpongeCollision", true)

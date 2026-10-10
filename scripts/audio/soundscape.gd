@@ -2,13 +2,14 @@ extends Node
 
 var loops: Dictionary = {}
 var effects: Dictionary = {}
+var footfall_player: AudioStreamPlayer3D
 
 func _exit_tree() -> void:
 	stop_all()
 
 func stop_all() -> void:
 	for child in get_children():
-		if child is AudioStreamPlayer:
+		if child is AudioStreamPlayer or child is AudioStreamPlayer3D:
 			child.stop()
 
 func _ready() -> void:
@@ -33,6 +34,19 @@ func _ready() -> void:
 			loops[name] = player
 		else:
 			effects[name] = player
+	footfall_player = AudioStreamPlayer3D.new()
+	footfall_player.stream = load("res://assets/audio/footfall.wav")
+	footfall_player.bus = "SFX"
+	footfall_player.unit_size = 4.0
+	footfall_player.max_distance = 24.0
+	footfall_player.volume_db = -7.0
+	add_child(footfall_player)
+
+func play_footfall(at: Vector3, strength: float) -> void:
+	# A single muted contact pulse per planted step; never a continuous smoke/rumble.
+	footfall_player.global_position = at
+	footfall_player.pitch_scale = lerpf(0.9, 1.02, clampf(strength, 0.0, 1.0))
+	footfall_player.play()
 
 func ambience(in_pod: bool, playing: bool) -> void:
 	for name in loops:
