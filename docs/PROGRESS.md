@@ -16,9 +16,9 @@
 | 素材再現 | Pythonで音9本を生成し、再生成のバイト一致を確認。Noto Sans CJK 2.004と公式配布のSHA256一致・OFL同梱 |
 | import | `tools/godot.sh --headless --path . --editor --import` を実行し、スクリプトと資源を読込、エラーなしで成功 |
 | ロジック・本編 | `tests/smoke_test.gd` は本編を直接インスタンス化。酸素・入力・保存・回収・死亡・帰投・修理・生態・物理経路を検証。`tools/verify.sh` が **SMOKE_OK checks=112 / VERIFY_OK**、終了0、ERROR・WARNINGなしで成功。成功記録は `build/logs/VERIFIED.txt` と `smoke.log` |
-| 実描画 | Xvfb＋Mesa llvmpipeのCompatibility、固定シード・固定カメラ。720p/1080pの画像は `build/screenshots/`。各13枚・計26枚の生成が成功。720pの13枚を目視し、形態・透明膜の通常/砂付着差・日本語UIを確認。1080pは生成済みで目視確認を別記 |
-| Windows export | 空のソースコピーで `tools/export_windows.sh` が成功。EXEのPE machine=0x8664、PCKを単独でLinuxから読込・10フレーム起動も成功。日本語説明・ライセンスを同梱。本repoの成果物は `build/windows/`、実行情報は同フォルダの `BUILD_INFO.txt` |
-| GitHub Actions | workflow作成済み。ローカル成功とCI成功は別。PR上の実行結果・artifactを確認する |
+| 実描画 | Xvfb＋Mesa llvmpipeのCompatibility、固定シード・固定カメラ。720p/1080pの画像は `build/screenshots/`。各13枚・計26枚を生成して全枚を目視。形態・透明膜の通常/砂付着差・日本語UI・設定全項目・図鑑の閉じる案内・完了表示を確認。実機プレイやFPS測定ではない |
+| Windows export | 空のソースコピーと実装commit `26de99a` のcleanな本repoで `tools/export_windows.sh` が成功。EXEのPE machine=0x8664を確認。空コピーのPCKを単独でLinuxから読込・10フレーム起動も成功。日本語説明・ライセンスを同梱。本repoの成果物は `build/windows/`、実行情報は同フォルダの `BUILD_INFO.txt` |
+| GitHub Actions | [run 38031387770](https://github.com/tsutchi30-lang/primordial-sea/actions/runs/38031387770) の全工程が成功。jobログを取得し、`SMOKE_OK checks=112`・`VERIFY_OK`・`WINDOWS_EXPORT_OK` とartifactのアップロード成功を確認。Windowsでの実行ではなくLinux runner上の検証・Windows export |
 | Windows実機 | 未実施。Windows OS上の起動・マウス・Alt+Tab・音・体感FPSは確認待ち |
 | 音 | 波形生成と再生処理・音量バス・解放を確認。音声出力の聴取は未実施 |
 | プレイ時間 | 初見25〜40分は目標。人の初見プレイ時間・操作感は未測定 |
@@ -26,6 +26,15 @@
 本編進行試験ではCI時間を短縮するためプレイヤーを試験地点へ移しますが、回収の距離・照準・遮蔽検査、状態・保存・死亡・修理は本編処理を呼びます。地形の直進・迂回は別途、プレイヤー断面の実際の物理形状で各地点と区間を検査します。これはWindowsで人が操作した通しプレイの代わりではありません。
 
 ソースの空コピーは `.godot/`、WAV、build、Gitメタデータを含まず、音を再生成してimport→112項目→exportを実行しています。LinuxでのPCK起動確認はWindows実機起動とは異なります。
+
+## 引き渡し記録（2026-10-10）
+
+- 作業ブランチ: `codex/m0-m1-navigation`。実装commit: `26de99a5c287e9b58737ba33bf548ba8db56fbf3`。本記録の更新は文書のみで、ゲーム本体はこのcommitと同じです。
+- レビュー用の [Draft PR #1](https://github.com/tsutchi30-lang/primordial-sea/pull/1) を作成。mainへのマージと公開Releaseは行っていません。
+- [Windows開発版をダウンロード](https://github.com/tsutchi30-lang/primordial-sea/actions/runs/38031387770/artifacts/11662123900)。artifact名は `PRIMORDIAL_SEA_Windows_M1_c44f3d35`、55,540,407 bytes。末尾はPR検証用merge commitで、実装元は上記commitです。保存期限は2026-10-17 06:34 UTCです。
+- ローカルの同実装の配布物は `build/windows/`。`BUILD_INFO.txt` のSource commitは `26de99a`、Source treeは `clean`。`VERIFICATION.txt` とEXE/PCKの `SHA256SUMS.txt` を同梱しています。
+- 実行入口は `tools/verify.sh`（音生成・import・112項目）、`tools/capture_visuals.sh`（26画面）、`tools/export_windows.sh`（検証再実行・Windows export）。この環境では準備済みのGodotを使うため `PRIMORDIAL_ENV_ROOT=/workspace/.primordial-sea-env` を指定しました。
+- 目視対象は両解像度のポッド、浅瀬、小型3種、ホガラ全身・腹側、窓喰い通常・砂付着、残骸、図鑑、設定、完了画面。日本語の欠落や設定の画面外は見られませんでした。動画・Windowsドライバ差・操作感を確認した記録ではありません。
 
 ## 受入基準
 
@@ -41,7 +50,7 @@
 | A13–A14 | 予兆・有限突進・回復・捜索終了・撤退、別経路の衝突 | 人の回避しやすさ |
 | A15–A17 | 本編の回収→死亡→再回収→保管→修理→再開。重要品の消失・二重化防止 | Windows実機の通しプレイ |
 | A18–A19 | 日本語、浅瀬・深度差・生物・透明膜・砂付着・HUD・メニューの描画 | Windowsドライバ差 |
-| A20–A21 | 固定版bootstrap、共通verify/export、EXE/PCK確認、CI定義 | GitHubの実行結果とWindows起動は別に確認 |
+| A20–A21 | 固定版bootstrap、共通verify/export、EXE/PCK確認、GitHub Actions成功と成果物アップロードを確認 | Windows起動は実機で確認 |
 | A22 | 実施・未実施を本書、ログ、最終報告で分離 | 新しい検証時も区別を保持 |
 
 ## 修正した問題
