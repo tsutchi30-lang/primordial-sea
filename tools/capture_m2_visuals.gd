@@ -110,7 +110,7 @@ func run() -> void:
 	var relay := WorldMap.point("relay", game.world)
 	camera(relay + Vector3(4, 3, 7), relay)
 	await shot("S03-relay-landmark")
-	camera(relay + Vector3(0, 0.4, 2), relay)
+	camera(game.m2.relay_anchor() + Vector3(0, 0, 1.5), game.m2.relay_anchor())
 	if not game.open_relay():
 		printerr("M2_CAPTURE_FAIL relay menu fixture not reachable")
 		quit(1)

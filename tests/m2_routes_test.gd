@@ -148,6 +148,9 @@ func collect(id: String) -> void:
 	check(game.state.parts[id] == "carried", "route cargo remains unbanked")
 
 func refill_relay(segment: String) -> void:
+	var approach: Array[Vector3] = [game.m2.relay_position(), game.m2.relay_anchor()+Vector3(0,0,1.2)]
+	if not await swim(approach,"approach visible relay screen"): return
+	Pilot.look(game.player,game.m2.relay_anchor())
 	record_segment(segment, "relay")
 	var position: Vector3 = game.player.global_position
 	var parts: Dictionary = game.state.parts.duplicate(true)
@@ -177,14 +180,14 @@ func run() -> void:
 	await step()
 	start_case("R1-pod-relay-pod")
 	if await swim(route("pod_relay"), "pod to relay"):
-		refill_relay("pod-to-relay")
+		await refill_relay("pod-to-relay")
 		await swim(route("pod_relay", true), "relay to pod")
 		await arrive_pod("relay-to-pod")
 	start_case("R2-relay-frame-relay-pod", "relay")
 	if await swim(route("relay_damping"), "relay to frame"):
 		await collect("damping_frame")
 		await swim(route("relay_damping", true), "frame return")
-		refill_relay("relay-frame-relay")
+		await refill_relay("relay-frame-relay")
 		await swim(route("pod_relay", true), "carried frame relay to pod")
 		await arrive_pod("carried-frame-relay-to-pod")
 		check(game.state.parts.damping_frame == "stored", "carried frame banked only at actual pod arrival")
@@ -192,12 +195,12 @@ func run() -> void:
 	if await swim(route("relay_shell"), "shell main entrance"):
 		await collect("phase_regulator")
 		await swim(route("shell_rear"), "shell rear exit")
-		refill_relay("relay-phase-main-rear-relay")
+		await refill_relay("relay-phase-main-rear-relay")
 	start_case("R4-shell-side-detour-roundtrip", "relay")
 	if await swim(route("shell_detour"), "shell side alternate"):
 		await collect("phase_regulator")
 		await swim(route("shell_detour", true), "shell side return")
-		refill_relay("relay-phase-side-relay")
+		await refill_relay("relay-phase-side-relay")
 	start_case("R5-plain-main-and-detour", "plain_entrance")
 	if await swim(route("plain_main"), "natural web main route"):
 		await collect("damping_frame")
@@ -215,7 +218,7 @@ func run() -> void:
 		if await swim(half, "advance before turnaround"):
 			half.reverse()
 			await swim(half, "voluntary turnaround")
-			refill_relay("turnback-" + id)
+			await refill_relay("turnback-" + id)
 	finish(failures.is_empty())
 
 func finish(ok: bool) -> void:

@@ -26,6 +26,7 @@ var observation_label: Label
 var marker_labels: Array[Label] = []
 var page := "title"
 var scroll: ScrollContainer
+var footer: HBoxContainer
 
 func _ready() -> void:
 	layer = 10
@@ -54,7 +55,8 @@ func _ready() -> void:
 	place(brand, Vector2(28, 20), Vector2(580, 24))
 	hud.add_child(brand)
 	objective = label("", 22, PAPER)
-	place(objective, Vector2(28, 56), Vector2(840, 42))
+	objective.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	place(objective, Vector2(28, 56), Vector2(820, 60))
 	hud.add_child(objective)
 	direction_label = label("", 17, AQUA)
 	direction_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
@@ -137,13 +139,19 @@ func _ready() -> void:
 	for side in ["left", "right", "top", "bottom"]:
 		margin.add_theme_constant_override("margin_" + side, 28)
 	panel.add_child(margin)
+	var column := VBoxContainer.new()
+	margin.add_child(column)
 	scroll = ScrollContainer.new()
+	scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
-	margin.add_child(scroll)
+	column.add_child(scroll)
 	menu_box = VBoxContainer.new()
 	menu_box.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	menu_box.add_theme_constant_override("separation", 13)
 	scroll.add_child(menu_box)
+	footer = HBoxContainer.new()
+	footer.add_theme_constant_override("separation", 12)
+	column.add_child(footer)
 
 func style(color: Color, radius: int, border: Color) -> StyleBoxFlat:
 	var result := StyleBoxFlat.new()
@@ -182,16 +190,19 @@ func make_bar(color: Color, y: int) -> ProgressBar:
 	hud.add_child(bar)
 	return bar
 
-func show_panel(new_page: String, title: String, body: String, buttons: Array) -> void:
+func show_panel(new_page: String, title: String, body: String, buttons: Array, fixed_buttons: Array = []) -> void:
 	scroll.scroll_vertical = 0
 	page = new_page
 	menu_box.add_theme_constant_override("separation", 13)
+	for child in footer.get_children():
+		footer.remove_child(child)
+		child.queue_free()
 	for child in menu_box.get_children():
 		menu_box.remove_child(child)
 		child.queue_free()
 	overlay.show()
 	panel.show()
-	var eyebrow := label("P R I M O R D I A L   S E A   /   装置安定化編", 14, GOLD)
+	var eyebrow := label("P R I M O R D I A L   S E A   /   帰還航海", 14, GOLD)
 	menu_box.add_child(eyebrow)
 	menu_box.add_child(label(title, 38 if new_page == "title" else 28, PAPER))
 	var body_label := label(body, 18, PAPER)
@@ -200,10 +211,23 @@ func show_panel(new_page: String, title: String, body: String, buttons: Array) -
 	menu_box.add_child(body_label)
 	for option in buttons:
 		add_button(option[0], option[1], option[2] if option.size() > 2 else false)
+	for option in fixed_buttons:
+		var button := add_button(option[0], option[1], option[2] if option.size() > 2 else false)
+		menu_box.remove_child(button)
+		footer.add_child(button)
+		button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	for node in menu_box.get_children() + footer.get_children():
+		if node is Button and not node.disabled:
+			call_deferred("_focus_button",node)
+			break
+
+func _focus_button(button: Button) -> void:
+	if is_instance_valid(button) and button.is_inside_tree(): button.grab_focus()
 
 func add_button(text: String, action: String, disabled := false) -> Button:
 	var button := Button.new()
 	button.text = text
+	button.set_meta("action", action)
 	button.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	button.custom_minimum_size.y = 44
 	button.disabled = disabled
@@ -242,7 +266,7 @@ func show_settings(settings: Dictionary) -> void:
 	add_button("設定を保存して戻る", "settings_back")
 
 func update_game(game) -> void:
-	hud.visible = game.mode != "title"
+	hud.visible = game.mode in ["play","dead"]
 	objective.text = game.state.objective()
 	var oxygen: float = game.state.oxygen
 	status.text = "酸素  %03d 秒　%s\nスーツ  %d %%" % [ceili(oxygen), "補給中" if game.player.in_pod else ("外気呼吸" if game.player.breathing_air else "タンク呼吸"), game.state.suit]
@@ -266,7 +290,7 @@ func update_game(game) -> void:
 	elif oxygen <= 0 and not game.player.in_pod and not game.player.breathing_air:
 		observation_label.text = "酸素切れ — 浮上してください！ 残り %.1f 秒" % game.state.anoxia_remaining()
 	elif game.cut_progress > 0:
-		observation_label.text = "粘糸を切断中  %d %%" % mini(100, int(game.cut_progress * 100))
+		observation_label.text = "%sを切断中  %d %%" % [game.cut_label, mini(100, int(game.cut_progress * 100))]
 	else:
 		observation_label.text = "観察中  %d %%" % mini(100, int(game.observe_time / 2.3 * 100)) if game.observe_time > 0 else ""
 	update_markers(game)
@@ -277,6 +301,8 @@ func update_markers(game) -> void:
 		points.append([Vector3(0, -36, -130), "艇の信号"])
 	if game.state.nav == "repaired":
 		points.append([game.m2.relay_position(), "中継補給点"])
+		if game.state.stabilized and game.state.return_core == "world":
+			points.append([Map.point("return_core", game.world), "沈没調査艇の信号"])
 		var part: String = game.m2.target_part()
 		if not part.is_empty():
 			points.append([Map.point(part, game.world), Items.item_name(part)])

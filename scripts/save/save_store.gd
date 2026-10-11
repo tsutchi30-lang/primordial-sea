@@ -3,8 +3,9 @@ extends RefCounted
 const Expedition = preload("res://scripts/progression/expedition.gd")
 const Items = preload("res://data/items/item_catalog.gd")
 const WorldMap = preload("res://data/biomes/world_map.gd")
-const SCHEMA_VERSION := 2
+const SCHEMA_VERSION := 3
 const SCHEMA1_BACKUP := "checkpoint.schema1.backup"
+const SCHEMA2_BACKUP := "checkpoint.schema2.backup"
 var directory := "user://"
 var last_error := ""
 var loaded_schema_version := 0
@@ -39,6 +40,9 @@ func _write_bytes_atomic(target: String, bytes: PackedByteArray) -> bool:
 	file.close()
 	if write_error != OK:
 		last_error = "保存データの書き込みに失敗しました。以前の保存を保持しています。"
+		return false
+	if FileAccess.get_file_as_bytes(temp) != bytes:
+		last_error = "一時保存の検証に失敗しました。以前の保存を保持しています。"
 		return false
 	if DirAccess.rename_absolute(temp, target) != OK:
 		last_error = "保存の置換に失敗しました。以前の保存を保持しています。再度保存してください。"
@@ -78,15 +82,15 @@ func load_checkpoint() -> Dictionary:
 	if not last_error.is_empty():
 		return {}
 	loaded_schema_version = int(data.schema_version)
-	migration_pending = loaded_schema_version == 1
+	migration_pending = loaded_schema_version < SCHEMA_VERSION
 	# Loading never writes either a checkpoint or its backup.
-	return _migrate_schema1(data) if migration_pending else data.duplicate(true)
+	return _migrate(data)
 
 func save_checkpoint(data: Dictionary) -> bool:
 	last_error = _checkpoint_error(data)
 	if not last_error.is_empty():
 		return false
-	var candidate := _migrate_schema1(data) if data.schema_version == 1 else data.duplicate(true)
+	var candidate := _migrate(data)
 	last_error = _checkpoint_error(candidate)
 	if not last_error.is_empty():
 		return false
@@ -99,12 +103,12 @@ func save_checkpoint(data: Dictionary) -> bool:
 			if not _supported_schema(previous.get("schema_version")):
 				last_error = "未知の保存形式です。この版では上書きしません。対応する版で開いてください。"
 				return false
-			if previous.schema_version == 1:
+			if previous.schema_version < SCHEMA_VERSION:
 				last_error = _checkpoint_error(previous)
 				if not last_error.is_empty():
 					return false
 				migration_pending = true
-				if not _backup_schema1():
+				if not _backup_original(int(previous.schema_version)):
 					return false
 	last_error = ""
 	if not _write_bytes_atomic(path("checkpoint"), JSON.stringify(candidate, "\t").to_utf8_buffer()):
@@ -113,18 +117,23 @@ func save_checkpoint(data: Dictionary) -> bool:
 	migration_pending = false
 	return true
 
-func _backup_schema1() -> bool:
+func _backup_original(schema: int) -> bool:
 	var original := FileAccess.get_file_as_bytes(path("checkpoint"))
 	if original.is_empty():
 		last_error = "移行前の保存を読み取れないため、移行を中止しました。元の保存を保持しています。"
 		return false
-	var backup := path(SCHEMA1_BACKUP)
+	var backup := path("checkpoint.schema%d.backup" % schema)
+	# Preserve distinct old saves under separate deterministic names. Retrying the
+	# same source reuses its exact backup, never overwrites an earlier original.
+	if FileAccess.file_exists(backup) and FileAccess.get_file_as_bytes(backup) != original:
+		var digest := HashingContext.new()
+		digest.start(HashingContext.HASH_SHA256)
+		digest.update(original)
+		backup = path("checkpoint.schema%d.backup.%s" % [schema, digest.finish().hex_encode()])
 	if FileAccess.file_exists(backup):
-		# A failed first write can retry using its exact original backup. A
-		# different existing backup is never overwritten or silently accepted.
 		if FileAccess.get_file_as_bytes(backup) == original:
 			return true
-		last_error = "既存の退避データが今回の旧保存と異なります。どちらも保持し、移行を中止しました。"
+		last_error = "退避先の内容が一致しません。元の保存を保持しています。"
 		return false
 	if not _write_bytes_atomic(backup, original):
 		last_error = "旧保存の退避に失敗しました。移行は未確定です。" + last_error
@@ -134,8 +143,18 @@ func _backup_schema1() -> bool:
 		return false
 	return true
 
+func _migrate(data: Dictionary) -> Dictionary:
+	var result := data.duplicate(true)
+	if result.schema_version == 1:
+		result = _migrate_schema1(result)
+	if result.schema_version == 2:
+		result.schema_version = 3
+		result.return_core = "world"
+		result.game_completed = false
+	return result
+
 func _migrate_schema1(data: Dictionary) -> Dictionary:
-	return {"schema_version": SCHEMA_VERSION, "nav": data.nav, "parts": {"damping_frame": "world", "phase_regulator": "world"}, "stabilized": false, "stored_metal": data.stored_metal, "stored_fiber": 0, "stored_shell": 0, "tank_level": 1 if data.tank_upgraded else 0, "cutter_upgraded": false, "tracked_part": "damping_frame", "buoys": data.buoys.duplicate(true)}
+	return {"schema_version": 2, "nav": data.nav, "parts": {"damping_frame": "world", "phase_regulator": "world"}, "stabilized": false, "stored_metal": data.stored_metal, "stored_fiber": 0, "stored_shell": 0, "tank_level": 1 if data.tank_upgraded else 0, "cutter_upgraded": false, "tracked_part": "damping_frame", "buoys": data.buoys.duplicate(true)}
 
 func _checkpoint_error(data: Dictionary) -> String:
 	var schema = data.get("schema_version")
@@ -171,12 +190,19 @@ func _checkpoint_error(data: Dictionary) -> String:
 			return "安定化と精密部品の組込状態が一致しません。"
 	if (data.stabilized or data.tank_level == 2 or data.cutter_upgraded) and data.nav != "repaired":
 		return "航法未復旧の状態と装備・安定化の進行が一致しません。"
+	if schema == 3:
+		if data.get("return_core") not in ["world", "stored", "installed"] or not data.get("game_completed") is bool:
+			return "帰還コアまたは帰還記録が不正です。携行中のコアは保存できません。"
+		if (data.return_core == "installed") != data.game_completed:
+			return "コアの組込状態と帰還達成が一致しません。"
+		if data.game_completed and (not data.stabilized or data.nav != "repaired"):
+			return "帰還達成に必要な整備が未完了です。"
 	return ""
 
 func _supported_schema(value: Variant) -> bool:
 	# JSON numbers are floats. Validate the whole numeric value before comparing
 	# versions; Array.has uses strict types and would reject a parsed 1.0 or 2.0.
-	return Items.valid_amount(value, SCHEMA_VERSION) and (value == 1 or value == SCHEMA_VERSION)
+	return Items.valid_amount(value, SCHEMA_VERSION) and value >= 1
 
 func load_settings() -> Dictionary:
 	var saved := read_json("settings")

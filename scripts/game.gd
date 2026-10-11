@@ -7,6 +7,8 @@ const Diver = preload("res://scripts/player/diver.gd")
 const Interface = preload("res://scripts/ui/interface.gd")
 const Pickup = preload("res://scripts/interaction/pickup.gd")
 const Soundscape = preload("res://scripts/audio/soundscape.gd")
+const M3Controller = preload("res://scripts/progression/m3_controller.gd")
+const Query = preload("res://scripts/interaction/interaction_query.gd")
 const M2Controller = preload("res://scripts/progression/m2_controller.gd")
 const WorldMap = preload("res://data/biomes/world_map.gd")
 const Items = preload("res://data/items/item_catalog.gd")
@@ -47,6 +49,9 @@ var pending_checkpoint_action := ""
 var checkpoint_error := ""
 var m2 = M2Controller.new()
 var cut_progress := 0.0
+var cut_label := "粘糸"
+var toast_priority := 0
+var m3 = M3Controller.new()
 
 func _ready() -> void:
 	process_mode = Node.PROCESS_MODE_ALWAYS
@@ -67,7 +72,7 @@ func _ready() -> void:
 	add_child(ecology)
 	ecology.setup(player, world)
 	ecology.player_hit.connect(_on_hit)
-	ecology.hint.connect(func(message): notify(message))
+	ecology.hint.connect(func(message): notify(message,5,0))
 	if ecology.has_signal("observed_event"):
 		ecology.observed_event.connect(_on_observed_event)
 	sound = Soundscape.new()
@@ -77,6 +82,7 @@ func _ready() -> void:
 	ecology.footfall.connect(func(at: Vector3, strength: float): sound.play_footfall(at, strength))
 	_build_pickups()
 	m2.setup(self)
+	m3.setup(self)
 	ecology.resource_drop.connect(m2.drop_resource)
 	ecology.resonance.connect(func(at: Vector3, strength: float): sound.play_resonance(at, strength))
 	ecology.defense_rattle.connect(func(at: Vector3): sound.play_resonance(at, 0.35, 1.7))
@@ -111,6 +117,14 @@ func _build_pickups() -> void:
 	pickups.append(nav_unit)
 
 func _unhandled_input(event: InputEvent) -> void:
+	if event is InputEventKey and event.echo: return
+	if mode == "return":
+		if event.is_action_pressed("pause"):
+			m3.sequence.finish()
+		elif event.is_action_pressed("interact"):
+			m3.sequence.set_suspended(not m3.sequence.suspended)
+		get_viewport().set_input_as_handled()
+		return
 	if event.is_action_pressed("fullscreen"):
 		_on_setting("fullscreen", not settings.fullscreen)
 		get_viewport().set_input_as_handled()
@@ -157,6 +171,8 @@ func _notification(what: int) -> void:
 	if what == NOTIFICATION_APPLICATION_FOCUS_OUT and is_instance_valid(player):
 		if mode == "play":
 			pause_game()
+		elif mode == "return":
+			m3.sequence.set_suspended(true)
 		else:
 			player.clear_input()
 		Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
@@ -185,11 +201,11 @@ func _physics_process(delta: float) -> void:
 	_check_guidance()
 	if state.oxygen <= state.capacity() * 0.35 and not state.warned_35:
 		state.warned_35 = true
-		notify("酸素 35% — ポッドまでの道を確認してください。水面では消費が止まります。", 7)
+		notify("酸素 35% — ポッドまでの道を確認してください。水面では消費が止まります。", 7,3)
 		sound.play_effect("warning")
 	if state.oxygen <= state.capacity() * 0.15 and not state.warned_15:
 		state.warned_15 = true
-		notify("酸素 15% — 帰投または浮上を。水面ではタンクは充填されません。", 7)
+		notify("酸素 15% — 帰投または浮上を。水面ではタンクは充填されません。", 7,3)
 		sound.play_effect("warning")
 	if shake_time > 0:
 		shake_time = maxf(0, shake_time - delta)
@@ -216,6 +232,7 @@ func _begin_at_pod() -> void:
 	player.relocate(POD, true)
 	ecology.reset()
 	m2.reset_expedition()
+	m3.sync_core(true)
 	world.set_stabilized(state.stabilized)
 	sound.set_stabilized(state.stabilized)
 	_rebuild_buoys()
@@ -231,7 +248,7 @@ func load_game() -> bool:
 	state.restore(data)
 	observations = saves.load_observations()
 	_begin_at_pod()
-	notify("ポッドの保存点から再開しました。補給・修復は完了しています。")
+	notify("帰還達成済み。帰還直前の海で調査を続けます。" if state.game_completed else "ポッドの保存点から再開しました。補給・修復は完了しています。",8,2)
 	return true
 
 func _save_checkpoint(candidate: Dictionary = {}) -> bool:
@@ -239,7 +256,7 @@ func _save_checkpoint(candidate: Dictionary = {}) -> bool:
 	if saves.save_checkpoint(data):
 		checkpoint = data.duplicate(true)
 		return true
-	notify(saves.last_error, 12)
+	notify(saves.last_error, 12,4)
 	return false
 
 func depart_pod() -> bool:
@@ -267,12 +284,18 @@ func return_to_pod() -> bool:
 	return _finish_return()
 
 func _finish_return() -> bool:
+	var cargo: Array[String] = []
+	if state.nav == "carried": cargo.append("航法ユニット")
+	for id in Items.PART_IDS:
+		if state.parts[id] == "carried": cargo.append(Items.item_name(id))
+	if state.return_core == "carried": cargo.append("帰還コア")
 	if not _commit_deposit("return"):
 		return false
 	m2.sync_parts()
+	m3.sync_core()
 	resume_game()
 	sound.play_effect("pickup")
-	notify("帰投完了。資材を保管し、酸素・スーツ・道具を補給しました。", 8)
+	notify(("保管・保存完了：" + "・".join(cargo) if not cargo.is_empty() else "帰投完了。資材を保管し補給しました。") + "\n次：" + state.objective(),10,2)
 	return true
 
 func repair_navigation() -> bool:
@@ -305,6 +328,7 @@ func _commit_deposit(action: String) -> bool:
 		return false
 	state = candidate
 	m2.sync_parts()
+	m3.sync_core()
 	pending_checkpoint_action = ""
 	checkpoint_error = ""
 	return true
@@ -350,6 +374,7 @@ func stabilize_device() -> bool:
 	pending_checkpoint_action = ""
 	checkpoint_error = ""
 	m2.sync_parts()
+	m3.sync_core()
 	sound.play_effect("success")
 	world.set_stabilized(true)
 	sound.set_stabilized(true)
@@ -371,6 +396,8 @@ func _show_save_failure(action: String, message: String) -> void:
 		detail = "航法修理は未確定です。金属片と航法ユニットは消費していません。"
 	elif action.begins_with("upgrade"):
 		detail = "装備改良は未確定です。素材は消費していません。"
+	elif action == "final_return":
+		detail = "帰還は未確定です。帰還コアは保管済みのままです。演出は開始していません。"
 	elif action == "stabilize":
 		detail = "装置安定化は未確定です。保管済みの部品は保持しています。"
 	hud.show_panel("save_failed", "保存できませんでした", message + "\n\n" + detail + "\n以前の正常な保存点は保持されています。保存先を確認してから再試行してください。\nタイトルへ戻ると、未保存の進行は失われます。", [["保存を再試行", "retry_save"], ["タイトルへ（前の保存点から再開）", "title"]])
@@ -382,6 +409,7 @@ func retry_checkpoint() -> bool:
 		"repair": return repair_navigation()
 		"upgrade": return upgrade_tank()
 		"stabilize": return stabilize_device()
+		"final_return": return m3.activate_return()
 	if pending_checkpoint_action.begins_with("upgrade:"):
 		return upgrade_equipment(pending_checkpoint_action.trim_prefix("upgrade:"))
 	return false
@@ -397,19 +425,21 @@ func die(reason: String) -> void:
 	hud.show_panel("dead", "救難信号を受信", reason + "\n持ち帰っていない資材は失われます。未保管の航法ユニットと重要部品は元の場所へ戻ります。\n観察記録は保持されます。", [["最後のポッド保存点から再出発", "retry"], ["タイトルへ", "title"]])
 
 func show_title(message := "") -> void:
+	if is_instance_valid(m3.sequence): m3.sequence.restore_scene()
 	pending_checkpoint_action = ""
 	checkpoint_error = ""
 	mode = "title"
 	_stop_play()
 	sound.ambience(true, false)
 	player.relocate(POD, true)
-	var intro := "五億年前に似た、もうひとつの海。\n生き物の暮らしを読み、失われた航法装置を持ち帰る。\n\n航法復旧・装置安定化編 — 一人称の海洋探索サバイバル"
+	var intro := "五億年前に似た、もうひとつの海。\n生き物の暮らしを読み、失われた装置を持ち帰り、元の時代へ。\n\n一人称の海洋探索サバイバル — 帰還と、その先の調査"
 	if not message.is_empty():
 		intro += "\n\n" + message
 	hud.show_panel("title", "原初の海", intro, [["新しく始める", "new"], ["続きから（ポッドの保存点）", "continue", not saves.exists()], ["設定", "settings"], ["終了", "quit"]])
 
 func _stop_play() -> void:
 	cut_progress = 0.0
+	m3.cancel_cut()
 	if is_instance_valid(ecology) and is_instance_valid(ecology.plains):
 		ecology.plains.cancel_cut()
 	player.active = false
@@ -433,7 +463,7 @@ func pause_game(page := "pause") -> void:
 	elif page == "complete":
 		hud.show_panel("complete", "航法復旧編 完了", "艇の記録が戻り、この海の座標が分かりました。\n白濁の平原と殻の墓場から二つの部品を持ち帰り、装置を安定化しましょう。\n\n白濁の平原の奥にある中継補給点が利用できるようになりました。", [["装置安定化編へ", "resume"], ["整備端末", "pod"], ["調査記録を見る", "journal"]])
 	elif page == "stabilized":
-		hud.show_panel("stabilized", "装置安定化編 完了", "二つの部品を組み込み、帰還装置の振動が静まりました。\n残る帰還コアの探索はM3で実装予定です。\n\nこの海には、まだ観察していない暮らしがあります。引き続き潜水できます。", [["観察を続ける", "resume"], ["調査記録を見る", "journal"], ["タイトルへ", "title"]])
+		hud.show_panel("stabilized", "装置安定化編 完了", "二つの部品を組み込み、帰還装置の振動が静まりました。\n沈没調査艇の信号を解析。殻の墓場の奥、環状の裂け目へ。\n中継で補給し、艇の固定具をカッターで外して帰還コアを持ち帰りましょう。", [["帰還コアを探す", "resume"], ["調査記録を見る", "journal"], ["タイトルへ", "title"]])
 	else:
 		hud.show_panel("pause", "潜水を一時停止", "酸素・生物・道具の時間は停止しています。\n水中で終了した場合は最後のポッド保存点から再開します。\n\n" + Controls.help_text(), [["潜水を再開", "resume"], ["図鑑・持ち物", "journal"], ["設定", "settings"], ["タイトルへ（最後の保存点を保持）", "title"]])
 
@@ -476,6 +506,12 @@ func _on_action(action: String) -> void:
 		"upgrade": upgrade_tank()
 		"pod": pause_game("pod")
 		"stabilize": stabilize_device()
+		"final_return": m3.activate_return()
+		"research": m3.continue_research()
+		"equipment_menu":
+			if player.in_pod and pending_checkpoint_action.is_empty():
+				_stop_play()
+				m2.show_equipment()
 		"relay_refill": refill_at_relay()
 		"journal": pause_game("journal")
 		"settings":
@@ -528,20 +564,24 @@ func apply_settings() -> void:
 	if ecology.has_method("set_low_particles"):
 		ecology.set_low_particles(settings.low_particles)
 
-func notify(message: String, seconds := 5.0) -> void:
+func notify(message: String, seconds := 5.0, priority := 1) -> void:
+	if toast_remaining > 0 and priority < toast_priority: return
+	toast_priority = priority
 	toast_text = message
 	toast_remaining = seconds
 
+func target_score(pickup: Node3D) -> float:
+	if not pickup.available: return -1.0
+	return Query.score(player.camera,pickup.global_position,4.0,0.80)
+
 func current_target():
 	var best = null
-	var best_distance := 4.0
+	var best_score := -1.0
 	for pickup in pickups:
-		if not pickup.available:
-			continue
-		var distance: float = player.global_position.distance_to(pickup.global_position)
-		if distance < best_distance and visible_to_player(pickup.global_position, 0.80):
+		var score := target_score(pickup)
+		if score > best_score:
 			best = pickup
-			best_distance = distance
+			best_score = score
 	return best
 
 func visible_to_player(point: Vector3, cosine := 0.8) -> bool:
@@ -559,9 +599,13 @@ func interaction_hint() -> String:
 	if player.global_position.distance_to(ENTRY) < 7:
 		return "%s  ポッドへ帰還・保管・補給" % Controls.label("interact")
 	if m2.near_relay():
-		return "%s  中継補給点 / 酸素・スーツ" % Controls.label("interact")
+		return m2.relay_hint()
 	var target = current_target()
 	if target:
+		if target.kind == "return_core" and not m3.mount.unlocked:
+			return "2 カッターを選択 / 左クリック長押しで固定具を切断" if selected_tool != 1 else "左クリック長押し / 固定具を切断（3 m以内）"
+		if Items.RESOURCES.has(target.kind) and not state.can_collect_resource(target.kind):
+			return "%s：携行枠または保管数が上限です" % target.title
 		return "%s  %sを回収" % [Controls.label("interact"), target.title]
 	for buoy in buoy_nodes:
 		if player.global_position.distance_to(buoy.global_position) < 2.5:
@@ -596,12 +640,16 @@ func interact() -> void:
 func collect_target(target) -> bool:
 	if mode != "play" or state.dead or player.in_pod or not target in pickups or not target.available:
 		return false
-	if player.global_position.distance_to(target.global_position) > 4 or not visible_to_player(target.global_position, 0.75):
+	if target != current_target():
 		return false
 	match target.kind:
+		"return_core":
+			if not m3.mount.unlocked or not state.collect_core(): return false
+			m3.mount.hide()
+			notify("帰還コアを回収。携行中・ポッド未保管です。中継で補給して持ち帰りましょう。",10,2)
 		"damping_frame", "phase_regulator":
 			if not state.collect_part(target.kind): return false
-			notify("%sを回収。救命ポッドへ持ち帰って保管してください。中継点では保管されません。" % target.title, 8)
+			notify("%sを回収。救命ポッドへ持ち帰って保管してください。中継点では保管されません。" % target.title, 8,2)
 		"repair_fiber", "shell_plate":
 			if not state.collect_resource(target.kind):
 				notify("%sの携行枠または保管上限です。この素材は残しておきます。" % target.title)
@@ -609,7 +657,7 @@ func collect_target(target) -> bool:
 			notify("%sを回収。ポッドへ帰ると保管されます。" % target.title)
 		"nav":
 			if not state.collect_nav(): return false
-			notify("航法ユニットを回収。ポッドへ持ち帰って保管してください。", 8)
+			notify("航法ユニットを回収。ポッドへ持ち帰って保管してください。", 8,2)
 		"metal":
 			if state.carried_metal >= Expedition.CARRIED_METAL_LIMIT:
 				notify("一般素材の携行枠がいっぱいです。ポッドへ保管しましょう。")
@@ -631,6 +679,7 @@ func collect_target(target) -> bool:
 	return true
 
 func select_tool(index: int) -> void:
+	m3.cancel_cut()
 	ecology.plains.cancel_cut()
 	cut_progress = 0.0
 	selected_tool = clampi(index, 0, 4)
@@ -644,7 +693,7 @@ func use_tool() -> void:
 	match selected_tool:
 		1:
 			var target = current_target()
-			if target and not Items.PARTS.has(target.kind):
+			if target and target.kind != "return_core" and not Items.PARTS.has(target.kind):
 				collect_target(target)
 		2:
 			if player.in_pod:
@@ -708,7 +757,7 @@ func _update_observation(delta: float) -> void:
 	if not target:
 		return
 	var id: String = target.species_id
-	player.zoom_fov = 38.0 if id in ["hogara", "windoweater"] else 12.0
+	player.zoom_fov = 38.0 if id in ["hogara", "windoweater", "kangaku"] else 12.0
 	observe_time += delta
 	if observe_time >= 2.3:
 		record_observation(id, "identified")
@@ -749,7 +798,7 @@ func _on_hit(amount: float) -> void:
 		return
 	shake_time = 0.45
 	sound.play_effect("membrane")
-	notify("スーツ損傷。横へ泳いで遮蔽物へ！ Q の緊急パルスも使えます。", 5)
+	notify("スーツ損傷。横や上下へ泳いで、岩陰へ離脱してください。", 5,3)
 	if state.dead:
 		die("スーツが損傷しました。予兆が見えたら横へ避け、岩陰へ離脱しましょう。")
 
@@ -774,27 +823,30 @@ func _rebuild_buoys() -> void:
 		buoy_nodes.append(mesh)
 
 func _check_guidance() -> void:
-	if player.in_pod:
+	if player.in_pod or (toast_remaining > 0 and toast_priority >= 2):
 		return
 	var z: float = player.position.z
-	if z < -15 and not tutorial_flags.has("shallow"):
+	if z < -15 and z >= -53 and not tutorial_flags.has("shallow"):
 		tutorial_flags.shallow = true
-		notify("浅瀬の発見：白い底の金属片は E で回収。小さな生物は観察器で拡大できます。", 10)
-	elif z < -53 and not tutorial_flags.has("hogara"):
+		notify("浅瀬の発見：白い底の金属片は E で回収。小さな生物は観察器で拡大できます。", 10,0)
+	elif z < -53 and z >= -69 and not tutorial_flags.has("hogara"):
 		tutorial_flags.hogara = true
-		notify("大きな帆の影が動いています。距離を保ち、腹側へ集まる小生物を観察しましょう。", 9)
-	elif z < -69 and not tutorial_flags.has("silt"):
+		notify("大きな帆の影が動いています。距離を保ち、腹側へ集まる小生物を観察しましょう。", 9,0)
+	elif z < -69 and z >= -86 and not tutorial_flags.has("silt"):
 		tutorial_flags.silt = true
-		notify("砂底の螺旋状の生物は、大きな動きに反応します。3 m 以内で Shift 加速を試せます。", 10)
-	elif z < -86 and not tutorial_flags.has("routes"):
+		notify("砂底の螺旋状の生物は、大きな動きに反応します。3 m 以内で Shift 加速を試せます。", 10,0)
+	elif z < -86 and z >= -178 and not tutorial_flags.has("routes"):
 		tutorial_flags.routes = true
-		notify("艇の信号は奥へ。東側の岩陰にも回り道があります。ライトは F、緊急パルスは Q。", 10)
-	elif z < -178 and not tutorial_flags.has("plain"):
+		notify("艇の信号は奥へ。東側の岩陰にも回り道があります。ライトは F、緊急パルスは Q。", 10,0)
+	elif z < -178 and z >= -300 and not tutorial_flags.has("plain"):
 		tutorial_flags.plain = true
-		notify("白濁の平原。岩の間の糸は切断でき、刃葉虫も削ります。西側を回る道と、奥の中継補給点を確かめましょう。", 11)
-	elif z < -300 and not tutorial_flags.has("graveyard"):
+		notify("白濁の平原。" + ("中継は航法修理と保存後に利用可能です。" if state.nav != "repaired" else "中継で補給できます。岩の間の糸と、刃葉虫の動きを観察しましょう。"),10,0)
+	elif z < -300 and z >= -430 and not tutorial_flags.has("graveyard"):
 		tutorial_flags.graveyard = true
-		notify("殻の墓場。壺の膜が音の予兆です。大きな空殻には前の入口と、東の破れ目・奥の出口があります。", 11)
+		notify("殻の墓場。壺の膜が音の予兆です。大きな空殻には前の入口と、東の破れ目・奥の出口があります。", 11,0)
+	elif z < -430 and not tutorial_flags.has("rift"):
+		tutorial_flags.rift = true
+		notify("環状の裂け目。岩柱の下に艇の灯りが見えます。棚で一度、周囲を観察できます。",10,0)
 	if WorldMap.is_near_boundary(player.position):
 		if toast_remaining <= 0:
 			notify("外洋から強い流れ。岩の盆地へ戻りましょう。", 4)
@@ -802,12 +854,19 @@ func _check_guidance() -> void:
 func _update_cutter(delta: float) -> void:
 	cut_progress = 0.0
 	if selected_tool == 1 and not player.in_pod and Input.is_action_pressed("use_tool") and use_lock <= 0.0:
+		if m3.cut_available():
+			ecology.plains.cancel_cut()
+			m3.cut(delta)
+			return
+		m3.cancel_cut()
+		cut_label = "粘糸"
 		var result: Dictionary = ecology.plains.cut_target(player.camera, delta, state.cutter_seconds())
 		cut_progress = float(result.get("progress", 0.0))
 		if result.get("completed", false):
 			sound.play_effect("pickup")
 	else:
 		ecology.plains.cancel_cut()
+		m3.cancel_cut()
 
 func _on_behavior_observed(creature: Node3D, event: String) -> void:
 	if mode != "play" or get_tree().paused or not observations.has(creature.species_id):

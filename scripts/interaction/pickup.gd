@@ -8,12 +8,13 @@ var renewable := true
 var source_id := ""
 var being_carried := false
 var home := Vector3.ZERO
+var collection_time := 0.0
 var mesh: MeshInstance3D
 var marker: Label3D
 
 func _ready() -> void:
 	home = position
-	if kind in ["nav", "damping_frame", "phase_regulator"]:
+	if kind in ["nav", "damping_frame", "phase_regulator", "return_core"]:
 		renewable = false
 	mesh = MeshInstance3D.new()
 	var material := StandardMaterial3D.new()
@@ -23,7 +24,7 @@ func _ready() -> void:
 	material.emission_enabled = true
 	material.emission = material.albedo_color
 	material.emission_energy_multiplier = 0.35
-	if kind in ["nav", "damping_frame", "phase_regulator"]:
+	if kind in ["nav", "damping_frame", "phase_regulator", "return_core"]:
 		var box := BoxMesh.new()
 		box.size = Vector3(0.65, 0.4, 0.85)
 		mesh.mesh = box
@@ -39,7 +40,7 @@ func _ready() -> void:
 	mesh.material_override = material
 	mesh.rotation_degrees = Vector3(10, 25, -15)
 	add_child(mesh)
-	if kind in ["nav", "damping_frame", "phase_regulator"]:
+	if kind in ["nav", "damping_frame", "phase_regulator", "return_core"]:
 		for x in [-0.25, 0.25]:
 			var ring := MeshInstance3D.new()
 			var tube := CylinderMesh.new()
@@ -50,9 +51,23 @@ func _ready() -> void:
 			ring.position = Vector3(x, 0.1, 0)
 			ring.material_override = material
 			add_child(ring)
+	if kind == "return_core":
+		mesh.rotation = Vector3.ZERO
+		for i in 7:
+			var fin := MeshInstance3D.new()
+			var disc := CylinderMesh.new()
+			disc.top_radius = 0.38 if i % 2 == 0 else 0.26
+			disc.bottom_radius = disc.top_radius
+			disc.height = 0.065
+			disc.radial_segments = 12
+			fin.mesh = disc
+			fin.position.y = (i-3)*0.13
+			fin.material_override = material
+			add_child(fin)
 	marker = Label3D.new()
 	marker.font = load("res://assets/fonts/NotoSansCJK-Regular.ttc")
-	marker.text = title if kind in ["nav", "damping_frame", "phase_regulator"] else "採集可"
+	marker.text = title
+	marker.visible = false # The sole aimed-target hint belongs to the HUD.
 	marker.font_size = 28
 	marker.pixel_size = 0.008
 	marker.modulate = material.albedo_color
@@ -64,8 +79,16 @@ func _ready() -> void:
 func set_available(value: bool) -> void:
 	available = value
 	visible = value
+	if value:
+		collection_time = 0
+		scale = Vector3.ONE
 
 func tick(delta: float) -> void:
+	if collection_time > 0:
+		collection_time = maxf(0,collection_time-delta)
+		scale = Vector3.ONE*maxf(0.02,collection_time/0.28)
+		position.y += delta*0.65
+		if collection_time <= 0: hide()
 	if being_carried:
 		return
 	if not available and renewable:
@@ -75,4 +98,8 @@ func tick(delta: float) -> void:
 
 func take() -> void:
 	set_available(false)
+	if kind in ["nav","damping_frame","phase_regulator","return_core"]:
+		collection_time = 0.28
+		show()
+		marker.hide()
 	replenish = 90.0

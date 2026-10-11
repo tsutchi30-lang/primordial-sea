@@ -6,7 +6,7 @@ import sys
 from PIL import Image, ImageDraw, ImageFont
 
 output = Path(sys.argv[1])
-frames = sorted(output.glob("*x*/S*.png"))
+frames = sorted(output.glob("*x*/*.png"))
 assert frames, f"No standard screenshots in {output}"
 try:
     font = ImageFont.load_default(size=15)

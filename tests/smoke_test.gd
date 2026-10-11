@@ -496,7 +496,7 @@ func test_checkpoint_failures() -> void:
 	check(game.state.oxygen == game.state.capacity() and game.state.suit == 100, "failed saving cannot strand an injured diver without air")
 	check(game.state.nav == "carried" and game.state.carried_metal == 2 and game.state.stored_metal == 0, "failed return retains uncommitted cargo without banking or consuming it")
 	check(game.checkpoint == prior_checkpoint and FileAccess.get_file_as_bytes(game.saves.path("checkpoint")) == prior_bytes, "failed return preserves both the prior live checkpoint and exact on-disk bytes")
-	check(not game.nav_unit.visible and not "帰投完了" in game.toast_text and not game.checkpoint_error.is_empty(), "failed return neither duplicates the unit nor overwrites its error with success")
+	check(not game.nav_unit.available and not "帰投完了" in game.toast_text and not game.checkpoint_error.is_empty(), "failed return neither duplicates the unit nor overwrites its error with success")
 	check(not game.retry_checkpoint() and game.state.carried_metal == 2 and game.state.nav == "carried", "repeated blocked return retry leaves cargo intact")
 	game.resume_game()
 	check(paused and game.hud.page == "save_failed" and not game.depart_pod(), "Escape or departure cannot bypass an unresolved cargo save")
@@ -541,7 +541,7 @@ func test_ecology() -> void:
 	var species := {}
 	for item in game.ecology.creatures:
 		species[item.species_id] = true
-	check(species.size() == 14, "all seven M1 species and seven M2 species have active scene instances")
+	check(species.size() == 15, "all M1/M2 species and Kangaku have active scene instances")
 	for id in ["opabinia", "hallucigenia", "olenoides", "glowgrain", "mudunraveler", "hogara", "windoweater"]:
 		check(species.has(id), "M1 species is present: " + id)
 	# Manual fixed simulation steps exercise the production ecosystem at useful

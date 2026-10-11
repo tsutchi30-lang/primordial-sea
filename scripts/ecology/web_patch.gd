@@ -14,6 +14,7 @@ var natural_food := false
 var gardener: Node3D
 var visual: MeshInstance3D
 var boundary: MeshInstance3D
+var loose_ends: MeshInstance3D
 var cut_progress := 0.0
 var material: StandardMaterial3D
 
@@ -28,12 +29,16 @@ func setup(id: String, at: Vector3, grazing := false) -> void:
 	material.cull_mode = BaseMaterial3D.CULL_DISABLED
 	var surface := SurfaceTool.new()
 	surface.begin(Mesh.PRIMITIVE_TRIANGLES)
+	# Dense, irregular diagonal/catenary strands stay inside the same contact
+	# section. No decorative hole exceeds the diver's 0.6 m diameter.
+	for i in 10:
+		var x := lerpf(-half_size.x,half_size.x,float(i)/9.0)
+		var end_x := clampf(x+0.28*sin(i*2.3),-half_size.x,half_size.x)
+		_curve(surface,Vector3(x,-half_size.y,0),Vector3(end_x,half_size.y,0),0.09,0.008)
 	for i in 9:
-		var x := lerpf(-half_size.x, half_size.x, float(i) / 8.0)
-		_strand(surface, Vector3(x, -half_size.y, 0), Vector3(x, half_size.y, 0), 0.008)
-	for i in 8:
-		var y := lerpf(-half_size.y, half_size.y, float(i) / 7.0)
-		_strand(surface, Vector3(-half_size.x, y, 0), Vector3(half_size.x, y, 0), 0.008)
+		var y := lerpf(-half_size.y,half_size.y,float(i)/8.0)
+		_curve(surface,Vector3(-half_size.x,y,0),Vector3(half_size.x,clampf(y+0.17*sin(i*1.7),-half_size.y,half_size.y),0),-0.10,0.008)
+	_curve(surface,Vector3(-half_size.x,-half_size.y,0),Vector3(half_size.x,half_size.y,0),0.08,0.014)
 	for i in 12:
 		var x := sin(float(i) * 2.3) * half_size.x * 0.92
 		var y := cos(float(i) * 1.7) * half_size.y * 0.92
@@ -53,6 +58,18 @@ func setup(id: String, at: Vector3, grazing := false) -> void:
 	boundary.mesh = edges.commit()
 	boundary.material_override = material
 	add_child(boundary)
+	var remnants := SurfaceTool.new()
+	remnants.begin(Mesh.PRIMITIVE_TRIANGLES)
+	for side in [-1.0,1.0]:
+		for i in 7:
+			var start := Vector3(side*half_size.x,lerpf(-1.1,1.2,float(i)/6),0)
+			_curve(remnants,start,start+Vector3(-side*0.2,-0.17,0.03),-0.06,0.01)
+	remnants.generate_normals()
+	loose_ends = MeshInstance3D.new()
+	loose_ends.mesh = remnants.commit()
+	loose_ends.material_override = material
+	loose_ends.hide()
+	add_child(loose_ends)
 	# Queryable volume, not a wall: a diver keeps every movement and tool input.
 	var area := Area3D.new()
 	area.name = "VisibleWebContact"
@@ -64,6 +81,14 @@ func setup(id: String, at: Vector3, grazing := false) -> void:
 	shape.shape = box
 	area.add_child(shape)
 	add_child(area)
+
+func _curve(surface: SurfaceTool,a: Vector3,b: Vector3,sag: float,width: float) -> void:
+	var previous := a
+	for step in range(1,9):
+		var t := float(step)/8.0
+		var point := a.lerp(b,t)+Vector3(0,sin(t*PI)*sag,sin(t*PI)*0.025)
+		_strand(surface,previous,point,width)
+		previous = point
 
 func _strand(surface: SurfaceTool, a: Vector3, b: Vector3, width: float) -> void:
 	var side := (b - a).normalized().cross(Vector3.FORWARD) * width
@@ -115,6 +140,7 @@ func sever(reason: String) -> bool:
 	intact = false
 	cut_progress = 0.0
 	visual.visible = false
+	loose_ends.show()
 	regrow_remaining = 120.0
 	event_remaining = 3.0
 	behavior_event = "web_grazed" if reason == "grazed" else "web_cut" if reason == "cutter" else ""
@@ -139,6 +165,7 @@ func tick(delta: float, player_at: Vector3, predator_at: Array[Vector3]) -> void
 	generation += 1
 	intact = true
 	visual.visible = true
+	loose_ends.hide()
 	behavior_event = "weave"
 	event_remaining = 3.0
 	regrown.emit(self)

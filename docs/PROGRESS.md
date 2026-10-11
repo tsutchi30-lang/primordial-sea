@@ -1,7 +1,55 @@
-# M0＋M1 / M1.5 / M2 実装・検証記録
+# 原初の海 — M3 / M2 / M1.5 / M1 実装・検証記録
+
+## 現在のM3 — 帰還まで実装・共通検証とWindows export成功
+
+最新M2 PR #3（未マージ）の `208a292faa0dc56bc7efc9c4cf09af691ae81500` から `codex/m3-return-and-ux` を作成。baseは `codex/m2-ecology-expansion`。M1/M2の履歴を保持しています。
+
+中継の可視画面と操作点、720p整備の主要ボタンと閉じる、進行に合う主目標と重要品通知を修正しました。殻の墓場の先に環状の裂け目、連続した帯の環顎、実天井と二出口の沈没調査艇を追加。固定具切断→帰還コアのE回収→中継補給→ポッド保管→保存成功後の28秒帰還→同じ海での調査継続が動きます。
+
+schema1/2の原文退避と3への明示移行、M2部品と独立したコア、先取り・携行・死亡・保管・帰還の保存失敗と再試行を実装。6m/10mの通常入力で横・上下回避、二方向に誘った他方出口への離脱、船内からの実退避を検証しました。実装と検証・撮影ツールの最終commitは `bcb491592757141d642b6022596c94dc570d8d74`。PRは [Draft #4](https://github.com/tsutchi30-lang/primordial-sea/pull/4) です。
+
+基本タンク480秒、カッター未改良、誘餌0・パルス0の実Input経路は、棚往復249.43秒／補給前48.0%、主コア往復313.82秒／34.6%、西迂回358.67秒／25.3%。主経路は中継補給後ポッドまで泳ぎ、実際にコアを保管しています。初見時間は未測定です。
+
+[構成と調整値](M3_IMPLEMENTATION.md)・[受入記録](M3_ACCEPTANCE.md)・[保存移行](SAVE_MIGRATION.md)・[Windowsの短い順路](PLAYTEST.md) を参照してください。Windows実機、物理マウス、連続動画再生、音の聴取、実GPU性能、初見の迷いやすさは未確認です。
+
+### 最終ビルドと取得先
+
+2026-10-11、生成音・`.godot`・buildのない新しいcloneから、固定Godot 4.7.2を使用した `tools/export_windows.sh` が終了0で成功しました。素材生成・import、M1/M2回帰、旧保存移行、M3保存・進行・生態、M1/M2/M3の本番Input経路、Windows PE/PCK検査をすべて通過。ローカルBUILD_INFOのソースはclean、export時刻は05:57:39 UTCです。通常ビルドにBlenderは不要です。ソースのない空フォルダ＋隔離user dataから、配布PCK単独のLinux/headless起動も30フレーム・終了0で成功（Windows実機確認とは別）。
+
+CIの [run 38115971509](https://github.com/tsutchi30-lang/primordial-sea/actions/runs/38115971509) は、共通検証・Windows export・22画面と4動画・artifact uploadまで全工程がsuccessで完了。実装head `bcb4915` と検証merge `e2137912bcf401398d467e6b25b29e1b4d28d4f9` を区別します。
+
+- [Windows開発版を取得](https://github.com/tsutchi30-lang/primordial-sea/actions/runs/38115971509/artifacts/11693204336)：`PRIMORDIAL_SEA_Windows_M3_e2137912`、67,156,651 bytes。保存期限 **2026-10-18 05:54:03 UTC**（日本時間14:54:03）。GitHubログインが必要な場合があります。
+- [画像・4動画・経路・ログ・条件を取得](https://github.com/tsutchi30-lang/primordial-sea/actions/runs/38115971509/artifacts/11693549040)：`PRIMORDIAL_SEA_M3_Evidence_e2137912`、41,177,857 bytes。保存期限 **2026-10-18 06:04:10 UTC**（日本時間15:04:10）。CI生成分の画像を別途手動検収したとは扱わず、同じbcb4915のローカル収録を下記の範囲で目視しました。
+- [CI検証ログ](https://github.com/tsutchi30-lang/primordial-sea/actions/runs/38115971509/artifacts/11694080632)：`verification-logs-38115971509-1`、2026-10-18 06:04:13 UTCまで。
+- M2安定化済みなら「続きから」。見える中継画面で補給し、墓場の奥→裂け目の棚→沈没調査艇→別出口→中継→ポッドへ。帰還装置起動後、同じ海で調査を続けられます。
+- 本編コード・素材・検証ツールの確定後は受入と取得先の文書だけを更新します。CI同梱文書はビルド時点のスナップショットです。最終の確認結果はこの節とM3_ACCEPTANCEを参照してください。
+
+### 自動確認の証拠
+
+最終ログは `build/m3-release/verification/`、M3経路は `routes/routes-manifest.json`、環顎は `ecology/manifest.json` に集約します。M1 smoke172・歩容30、旧移行67、M2進行134・UI61・網30・墓場34・実在種36・地形28・経路95、M3移行67・進行68・環顎52・経路11が成功。試験数は遊びやすさの評価ではありません。通常保存には触れず、各ケースに隔離保存先を使っています。
+
+### 描画・動画と確認範囲
+
+`tools/capture_m3.sh build/m3-release all` が終了0、22枚の720p静止画と4本のMP4を生成。全編2秒刻みの抽出フレームを目視し、環顎の予兆から回避まで冒頭6秒は4fpsでも確認しました。元フレームindex/PTSを保持し、補間・早回し・色補正はしていません。静止画は全22画面の一覧と主要画面の原寸、粘糸はM2との同条件比較を目視しています。
+
+| 動画 | 実際の内容 | MP4の尺 |
+|---|---|---|
+| relay | 入口から画面へ泳ぎE操作、UIで酸素・スーツ補給、退出 | 18.792秒 |
+| kangaku | 通常巡回への接近、輪の予兆、通常入力の回避、岩陰、退避 | 27.125秒 |
+| core | 北入口、カッター解除、E回収、東出口から遮蔽へ | 27.083秒 |
+| return | 携行コアを持つポッド前fixture→保管・端末→28秒帰還→成功→調査継続 | 35.375秒 |
+
+Linux x86_64、Godot 4.7.2、Compatibility、Mesa25.0.7 llvmpipe（LLVM19.1.7）、1280×720・通常粒子、動画24fps・揺れ0のオフライン収録。初期配置後は本番Input・衝突・酸素・AIが動き、敵の位置・状態を書き換えていません。各動画は独立ケースで、長い帰路はroute試験です。`capture-source-all.json` で開始・終了のコード／素材／ツール222ファイルが一致しました。
+
+ローカル成果物は `build/PRIMORDIAL_SEA_Windows_M3_bcb4915.zip` と `build/PRIMORDIAL_SEA_M3_Evidence_bcb4915.zip`。証跡には画像・MP4・フレーム列・M2との粘糸比較・本編経路・最終検証ログ・受入文書・ソース情報とハッシュを含みます。Windowsパッケージの実行ファイルはclean export時のまま、後から更新した文書の版はREVIEW_DOCS_INFO.jsonへ分けて記録します。
+
+連続動画再生・音の聴取・Windows実機操作・実GPU性能・初見時間は未確認。Linuxのオフライン収録の滑らかさをWindowsでの実時間fpsとみなしません。残る具体的な改善はQUALITY_BACKLOGを参照してください。
+
+以下は過去のM2/M1.5/M1の記録で、M3の検証結果とは分けます。
 
 
-## 現在のM2 — 装置安定化まで実装・共通検証済み
+
+## M2時点の記録 — 装置安定化まで実装・共通検証済み
 
 最新M1.5 `5b6aefbd92da3381b703b8cd9f4d75d042b967d8` から `codex/m2-ecology-expansion` を作成。M1.5 PR #2 は未マージのため、そのブランチをbaseとする積み重ねPRです。
 

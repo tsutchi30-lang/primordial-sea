@@ -64,20 +64,46 @@ tools/export_windows.sh
 
 `.github/workflows/build.yml` は PR、main への push、手動実行で同じ `tools/export_windows.sh` を起動します。Markdown だけの変更では自動 export を省略し、必要なら手動実行します。権限は `contents: read`、45分のジョブ上限、同じブランチの古い実行のキャンセル、7日の artifact 保持、存在しない artifact の失敗扱いを設定しています。checkout v6.1.0 と upload-artifact v6.0.0 は公式タグを確認した commit SHA に固定しています。
 
-GitHub の **Actions → Windows development build → 成功した実行 → Artifacts** から `PRIMORDIAL_SEA_Windows_M2_<commit>` を取得して展開してください。GitHub が ZIP にするため内部を二重ZIPにはしません。最初の workflow が main に入るまでは手動実行ボタンが出ない場合があります。初回は PR の実行結果を確認し、ユーザーのレビューとマージ後に main の実行を見ます。
+GitHub の **Actions → Windows development build → 成功した実行 → Artifacts** から `PRIMORDIAL_SEA_Windows_M3_<commit>` を取得して展開してください。GitHub が ZIP にするため内部を二重ZIPにはしません。最初の workflow が main に入るまでは手動実行ボタンが出ない場合があります。初回は PR の実行結果を確認し、ユーザーのレビューとマージ後に main の実行を見ます。
 
 workflow ファイルを作ったこと、ローカルで成功したこと、GitHub で実行結果を確認したことは別です。実際の検証結果と描画確認は `docs/PROGRESS.md`、実機確認は `docs/PLAYTEST.md` を参照してください。
 
 
-## M2 の進行・経路・描画
+## M3の共通ゲートと収録
+
+`tools/export_windows.sh` は `tools/verify.sh` を呼ぶため、exportを使う場合に同じverifyを先に繰り返す必要はありません。既存M1/M2の全ゲートを保持し、schema1→3／2→3、M3実mainの回収・保存失敗・帰還・調査継続、環顎の感知・6m/10m横上下回避・実捕食・船内退避、基本装備の実Input往復を追加しています。
+
+| 追加試験 | 成功マーカー | 出力 |
+|---|---|---|
+| m3_save_test.gd | M3_SAVE_OK | build/logs/m3-save.log |
+| m3_flow_test.gd | M3_FLOW_OK | build/logs/m3-flow.log |
+| m3_ecology_test.gd（fixed-fps60） | M3_ECOLOGY_OK | build/m3/ecology/manifest.json |
+| m3_routes_test.gd（fixed-fps60） | M3_ROUTES_OK | build/m3/routes/routes-manifest.json |
+
+```bash
+tools/capture_m3.sh                     # 720p22画面＋4本のInput動画
+tools/capture_m3.sh build/m3 probe       # 同じ24fps入力をheadlessで確認
+tools/capture_m3.sh build/m3 visuals     # 画面のみ
+tools/capture_m3.sh build/m3 kangaku     # 環顎の区間のみ（relay/core/returnも指定可能）
+```
+
+X11かXvfb、Mesa、ffmpeg、Python Pillowが必要です。静止画像は宣言したカメラ・進行・姿勢fixture。動画は各区間の始点と開始状態だけ設定し、以後は本番Input、Diverの衝突、酸素、AI、E操作と端末ボタンを通します。return区間だけは携行コアを持つポッド前が始点で、長い帰路は別のroute試験です。
+
+動画は1280×720、24fps、h264/AAC。ffprobeで解像度・fps・manifestの経過時間と音声長を照合します。補間・早回し・色補正なし。フレーム列は元MP4のframe index/PTSを保存。`capture-source-all.json` は収録開始のソースをハッシュ化し、終了時の一致を検査します。収録中はコード／素材／ツールを編集しません。
+
+粘糸の同条件比較には `tools/capture_m3_web.gd` を使います。今回のbeforeはM2の `208a292` を `git archive` した別ディレクトリへ同じharnessとUIDだけをコピーし、音生成・import後に実行。afterはM3の同じカメラ・FOV80・720pで実行しました。各版の `intact.png` / `cut.png` とmanifest、照合した `comparison.json` はローカルのM3証跡ZIPに含みます。切断後は全sectionを切った静止fixtureであり、自然な回収走行の証拠はcore動画とplains試験です。
+
+CIはM3を収録し、Windows、`PRIMORDIAL_SEA_M3_Evidence_<commit>`、検証ログを7日保存します。失敗時も部分出力を残します。実装headとPR検証mergeは別々に記録します。下記M1.5/M2の収録入口は歴史的な比較用として保持します。
+
+## M2 の進行・経路・描画（既存入口）
 
 共通verifyは既存M1の試験を残し、次を追加します。実際の合否は `docs/M2_ACCEPTANCE.md` と `build/logs/` で確認してください。入口が存在すること自体を合格とは扱いません。
 
 | 試験 | 内容 | 成功マーカー |
 |---|---|---|
-| `save_migration_test.gd` | schema 1→2、原文退避、書込失敗・再試行、未来版拒否 | `SAVE_MIGRATION_OK` |
+| `save_migration_test.gd` | schema 1→3、原文退避、書込失敗・再試行、未来版拒否 | `SAVE_MIGRATION_OK` |
 | `m2_flow_test.gd` | 実mainでM1→M2、両回収順、中継後の死亡・終了、保管・改良・安定化の保存失敗とUI再試行 | `M2_FLOW_OK` |
-| `m2_interface_test.gd` | 14種のUI、720pスクロール、6ブイ、中継の距離/視線ガード、ポーズとフォーカス | `M2_INTERFACE_OK` |
+| `m2_interface_test.gd` | 15種のUI、720pスクロール、6ブイ、中継の距離/視線ガード、ポーズとフォーカス | `M2_INTERFACE_OK` |
 | `plains_ecology_test.gd` | 網・切断・自然採餌・実接触した捕食者の拘束 | `PLAINS_ECOLOGY_OK` |
 | `graveyard_ecology_test.gd` | 有限の音伝播、六面這いの調査・終了・防御・清掃 | `GRAVEYARD_ECOLOGY_OK` |
 | `palaeo_ecology_test.gd` | 実在モデル3種の行動と独立した捕食対象の再供給 | `PALAEO_OK` |
@@ -105,7 +131,7 @@ MP4はh264/AACへ符号化し、50秒以上の映像・音声、1280×720、24fp
 
 同じソースでのimportと描画を並行実行しないでください。正式収録中はコード・素材・harnessを凍結します。`capture-source-*.json` は開始時の実装headとcheckout、未コミット状態、実行素材・コード・制作/検証ツールのSHA256を記録し、終了時に同じ入力だったか照合します。変更があれば収録入口は失敗します。各撮影manifestの起動元を後から書き換えません。
 
-CIはM1.5の19組比較の代わりにこのM2入口を実行し、`PRIMORDIAL_SEA_M2_Evidence_<commit>` に画像・MP4・manifest・経路・ログ・レビュー文書を7日保存します。失敗時も部分的な証拠とログをアップロードします。Windows artifactと合わせ、末尾commitはPR検証checkoutである可能性があり、実装headはmanifest/BUILD_INFOで区別します。M1.5比較の入口は関連する描画を再検討するときに使えます。
+M2時点のCIはM1.5の19組比較の代わりにこのM2入口を実行し、`PRIMORDIAL_SEA_M2_Evidence_<commit>` に画像・MP4・manifest・経路・ログ・レビュー文書を7日保存します。失敗時も部分的な証拠とログをアップロードします。Windows artifactと合わせ、末尾commitはPR検証checkoutである可能性があり、実装headはmanifest/BUILD_INFOで区別します。M1.5比較の入口は関連する描画を再検討するときに使えます。
 
 ## M1.5 の比較画像・動く本編（独立した既存入口）
 
@@ -144,6 +170,6 @@ tools/capture_comparison.sh              # 改善前も Git から再生成し�
 
 ### 証拠と配布の識別
 
-`evidence.json` はファイルのSHA256、撮影・抽出harnessのSHA256、実装ブランチhead、ビルドcheckout commit、未コミット変更の有無と、Git対象ファイル全体の内容fingerprintを記録します。PRのCIでは `PRIMORDIAL_SOURCE_COMMIT` に実装head、`PRIMORDIAL_BUILD_COMMIT` に検証用merge commitを渡します。Windowsの `BUILD_INFO.txt` も両者を区別し、M1.5の版情報を記録します。
+`evidence.json` はファイルのSHA256、撮影・抽出harnessのSHA256、実装ブランチhead、ビルドcheckout commit、未コミット変更の有無と、Git対象ファイル全体の内容fingerprintを記録します。PRのCIでは `PRIMORDIAL_SOURCE_COMMIT` に実装head、`PRIMORDIAL_BUILD_COMMIT` に検証用merge commitを渡します。Windowsの `BUILD_INFO.txt` も両者を区別し、現在のゲーム版を記録します。
 
-M1.5時点のCIは `PRIMORDIAL_SEA_Visuals_M1_5_<commit>` に改善前後PNG、MP4、frame列、manifest、ログ、レビュー文書を7日間保存していました。現在のCIは上記M2証跡へ切り替えています。描画や動画が失敗した場合はjobを失敗させ、成功した扱いにはしません。失敗時の部分的な証拠も取得できます。全体の実行上限は45分、各描画・収録にも個別timeoutがあります。PRのbaseをmainに限定していないため、M1実装ブランチへの積み重ねPRでも実行されます。
+M1.5時点のCIは `PRIMORDIAL_SEA_Visuals_M1_5_<commit>` に改善前後PNG、MP4、frame列、manifest、ログ、レビュー文書を7日間保存していました。現在のCIは上記M3証跡へ切り替えています。描画や動画が失敗した場合はjobを失敗させ、成功した扱いにはしません。失敗時の部分的な証拠も取得できます。全体の実行上限は45分、各描画・収録にも個別timeoutがあります。PRのbaseをmainに限定していないため、M1実装ブランチへの積み重ねPRでも実行されます。

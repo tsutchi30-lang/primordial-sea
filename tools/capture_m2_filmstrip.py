@@ -25,6 +25,8 @@ if mode == "plains":
     sequences.append(("web-reaction", 15, min(20, timestamps[-1] - 15), 2))
 elif mode == "graveyard":
     sequences.append(("sound-and-passage", 3, min(18, timestamps[-1] - 3), 2))
+elif mode == "kangaku":
+    sequences.append(("warning-and-dodge", 0, min(10, timestamps[-1]), 4))
 selection_manifest = {"video": str(video), "selection": "Nearest original decoded frame to each requested time; labels show actual original PTS. No fps resampling.", "sequences": []}
 for label, start, seconds, fps in sequences:
     folder = output / label
