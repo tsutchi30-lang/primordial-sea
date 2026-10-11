@@ -168,6 +168,6 @@ tools/capture_comparison.sh              # 改善前も Git から再生成し�
 
 ### 証拠と配布の識別
 
-`evidence.json` はファイルのSHA256、撮影・抽出harnessのSHA256、実装ブランチhead、ビルドcheckout commit、未コミット変更の有無と、Git対象ファイル全体の内容fingerprintを記録します。PRのCIでは `PRIMORDIAL_SOURCE_COMMIT` に実装head、`PRIMORDIAL_BUILD_COMMIT` に検証用merge commitを渡します。Windowsの `BUILD_INFO.txt` も両者を区別し、M1.5の版情報を記録します。
+`evidence.json` はファイルのSHA256、撮影・抽出harnessのSHA256、実装ブランチhead、ビルドcheckout commit、未コミット変更の有無と、Git対象ファイル全体の内容fingerprintを記録します。PRのCIでは `PRIMORDIAL_SOURCE_COMMIT` に実装head、`PRIMORDIAL_BUILD_COMMIT` に検証用merge commitを渡します。Windowsの `BUILD_INFO.txt` も両者を区別し、現在のゲーム版を記録します。
 
 M1.5時点のCIは `PRIMORDIAL_SEA_Visuals_M1_5_<commit>` に改善前後PNG、MP4、frame列、manifest、ログ、レビュー文書を7日間保存していました。現在のCIは上記M3証跡へ切り替えています。描画や動画が失敗した場合はjobを失敗させ、成功した扱いにはしません。失敗時の部分的な証拠も取得できます。全体の実行上限は45分、各描画・収録にも個別timeoutがあります。PRのbaseをmainに限定していないため、M1実装ブランチへの積み重ねPRでも実行されます。

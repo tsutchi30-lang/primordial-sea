@@ -149,6 +149,10 @@ func core_and_saving() -> void:
 	check("帰還コアを回収" in game.toast_text,"region guidance immediately after core leaves pickup visible")
 	game.notify("酸素不足",5,3)
 	check(game.toast_text == "酸素不足","emergency supersedes pickup")
+	game.toast_remaining = 0
+	game.tutorial_flags.clear()
+	game._check_guidance()
+	check(game.toast_text.begins_with("環状の裂け目。"),"deep arrival never replays shallow or graveyard guidance")
 	check(game.state.nav == "wreck" and not game.state.stabilized and not game.m3.return_status().allowed,"early core never grants M1/M2/final return")
 	# Independent notebook write cannot bank a carried core.
 	game.record_observation("kangaku","identified")

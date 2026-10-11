@@ -826,24 +826,24 @@ func _check_guidance() -> void:
 	if player.in_pod or (toast_remaining > 0 and toast_priority >= 2):
 		return
 	var z: float = player.position.z
-	if z < -15 and not tutorial_flags.has("shallow"):
+	if z < -15 and z >= -53 and not tutorial_flags.has("shallow"):
 		tutorial_flags.shallow = true
-		notify("浅瀬の発見：白い底の金属片は E で回収。小さな生物は観察器で拡大できます。", 10)
-	elif z < -53 and not tutorial_flags.has("hogara"):
+		notify("浅瀬の発見：白い底の金属片は E で回収。小さな生物は観察器で拡大できます。", 10,0)
+	elif z < -53 and z >= -69 and not tutorial_flags.has("hogara"):
 		tutorial_flags.hogara = true
-		notify("大きな帆の影が動いています。距離を保ち、腹側へ集まる小生物を観察しましょう。", 9)
-	elif z < -69 and not tutorial_flags.has("silt"):
+		notify("大きな帆の影が動いています。距離を保ち、腹側へ集まる小生物を観察しましょう。", 9,0)
+	elif z < -69 and z >= -86 and not tutorial_flags.has("silt"):
 		tutorial_flags.silt = true
-		notify("砂底の螺旋状の生物は、大きな動きに反応します。3 m 以内で Shift 加速を試せます。", 10)
-	elif z < -86 and not tutorial_flags.has("routes"):
+		notify("砂底の螺旋状の生物は、大きな動きに反応します。3 m 以内で Shift 加速を試せます。", 10,0)
+	elif z < -86 and z >= -178 and not tutorial_flags.has("routes"):
 		tutorial_flags.routes = true
-		notify("艇の信号は奥へ。東側の岩陰にも回り道があります。ライトは F、緊急パルスは Q。", 10)
-	elif z < -178 and not tutorial_flags.has("plain"):
+		notify("艇の信号は奥へ。東側の岩陰にも回り道があります。ライトは F、緊急パルスは Q。", 10,0)
+	elif z < -178 and z >= -300 and not tutorial_flags.has("plain"):
 		tutorial_flags.plain = true
 		notify("白濁の平原。" + ("中継は航法修理と保存後に利用可能です。" if state.nav != "repaired" else "中継で補給できます。岩の間の糸と、刃葉虫の動きを観察しましょう。"),10,0)
-	elif z < -300 and not tutorial_flags.has("graveyard"):
+	elif z < -300 and z >= -430 and not tutorial_flags.has("graveyard"):
 		tutorial_flags.graveyard = true
-		notify("殻の墓場。壺の膜が音の予兆です。大きな空殻には前の入口と、東の破れ目・奥の出口があります。", 11)
+		notify("殻の墓場。壺の膜が音の予兆です。大きな空殻には前の入口と、東の破れ目・奥の出口があります。", 11,0)
 	elif z < -430 and not tutorial_flags.has("rift"):
 		tutorial_flags.rift = true
 		notify("環状の裂け目。岩柱の下に艇の灯りが見えます。棚で一度、周囲を観察できます。",10,0)

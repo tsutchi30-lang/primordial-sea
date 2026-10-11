@@ -60,7 +60,7 @@ func run() -> void:
 	await shot("R-available","Same screen camera; saved navigation, low oxygen.")
 	game.open_relay()
 	await shot("R-menu","Real relay open operation from declared close camera.")
-	camera(Map.ABSOLUTE_POINTS.rift_shelf,Vector3(23,-261,-493))
+	camera(Map.ABSOLUTE_POINTS.rift_shelf,Vector3(4,-259,-490))
 	await shot("D-rift-entry","Frozen normal initial ecology; shelf view toward ship, rock columns and cross current.")
 	var k = game.ecology.rift.kangaku
 	camera(k.position+Vector3(6,1,8),k.position+Vector3(0,0,3))

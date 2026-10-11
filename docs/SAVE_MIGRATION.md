@@ -15,9 +15,9 @@ schema 3では新項目の欠落を拒否します。コアは保存時 `world` 
 
 進行は `user://checkpoint.json`、観察は `observations.json`、設定は `settings.json` に保存します。通常の進行保存点は救命ポッドです。中継での補給は保存点を更新しません。
 
-## schema 1 → 2
+## schema 1 → 2 → 3
 
-`SaveStore.load_checkpoint()` は旧形式を検証してから、メモリ上の schema 2 を返します。この読み込みでは元ファイルを書き換えず、退避ファイルもまだ作りません。`loaded_schema_version == 1` と `migration_pending == true` により、変換した状態と保存済み状態を区別できます。
+`SaveStore.load_checkpoint()` は旧形式を検証してから、メモリ上でschema 2へ変換し、続けてM3項目を追加したschema 3を返します。この読み込みでは元ファイルを書き換えず、退避ファイルもまだ作りません。`loaded_schema_version == 1` と `migration_pending == true` により、変換した状態と保存済み状態を区別できます。
 
 | 旧フィールド | 新しい状態 |
 |---|---|
@@ -67,4 +67,4 @@ timeout --kill-after=10 60 tools/godot.sh --headless --path . --script res://tes
 
 成功時は `SAVE_MIGRATION_OK`、失敗時は非ゼロ終了と対象の説明を出します。旧未完了・完了、元ファイルと独立記録の保持、退避・移行書込の失敗と再試行、未知版、完全な実行時コピーと再開用状態の違い、中継、資材境界、状態の不整合、6ブイを扱います。書込失敗は一時ファイルの場所をディレクトリにして再現するため、root 実行でも再現可能です。
 
-本編の実回収、帰投 UI、安定化・装備改良の保存失敗と再試行は `m2_flow_test.gd` で別途確認します。検証の実行結果は `docs/PROGRESS.md` / `docs/M2_ACCEPTANCE.md` と実際のログを参照してください。この文書のコマンド掲載だけでは実行済みを意味しません。
+本編の実回収、帰投 UI、安定化・装備改良の保存失敗と再試行は `m2_flow_test.gd` で別途確認します。検証の実行結果は `docs/PROGRESS.md` / `docs/M3_ACCEPTANCE.md` と実際のログを参照してください。この文書のコマンド掲載だけでは実行済みを意味しません。
