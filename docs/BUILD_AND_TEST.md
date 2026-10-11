@@ -91,6 +91,8 @@ X11かXvfb、Mesa、ffmpeg、Python Pillowが必要です。静止画像は宣�
 
 動画は1280×720、24fps、h264/AAC。ffprobeで解像度・fps・manifestの経過時間と音声長を照合します。補間・早回し・色補正なし。フレーム列は元MP4のframe index/PTSを保存。`capture-source-all.json` は収録開始のソースをハッシュ化し、終了時の一致を検査します。収録中はコード／素材／ツールを編集しません。
 
+粘糸の同条件比較には `tools/capture_m3_web.gd` を使います。今回のbeforeはM2の `208a292` を `git archive` した別ディレクトリへ同じharnessとUIDだけをコピーし、音生成・import後に実行。afterはM3の同じカメラ・FOV80・720pで実行しました。各版の `intact.png` / `cut.png` とmanifest、照合した `comparison.json` はローカルのM3証跡ZIPに含みます。切断後は全sectionを切った静止fixtureであり、自然な回収走行の証拠はcore動画とplains試験です。
+
 CIはM3を収録し、Windows、`PRIMORDIAL_SEA_M3_Evidence_<commit>`、検証ログを7日保存します。失敗時も部分出力を残します。実装headとPR検証mergeは別々に記録します。下記M1.5/M2の収録入口は歴史的な比較用として保持します。
 
 ## M2 の進行・経路・描画（既存入口）

@@ -10,7 +10,7 @@ Godot 4.7.2 / GDScript / Compatibility で作る、Windows x86_64 向けのオ�
 
 ## Windowsで遊ぶ
 
-M3のWindows開発版・画像・入力動画の取得先と検証状態は [最新の進捗](docs/PROGRESS.md) を参照してください。Actionsの `PRIMORDIAL_SEA_Windows_M3_<commit>` と `PRIMORDIAL_SEA_M3_Evidence_<commit>` は7日保存です。フォルダ全体を展開して `PrimordialSea.exe` を起動し、EXEとPCK・ライセンスを同じ場所に保持します。
+[M3 Windows開発版を取得](https://github.com/tsutchi30-lang/primordial-sea/actions/runs/38115971509/artifacts/11693204336)（実装bcb4915、2026-10-18 05:54 UTCまで）。[画像・4本の入力動画](https://github.com/tsutchi30-lang/primordial-sea/actions/runs/38115971509/artifacts/11693549040) と [確認結果・保存期限](docs/PROGRESS.md) も参照してください。Actionsの `PRIMORDIAL_SEA_Windows_M3_<commit>` と `PRIMORDIAL_SEA_M3_Evidence_<commit>` は7日保存です。フォルダ全体を展開して `PrimordialSea.exe` を起動し、EXEとPCK・ライセンスを同じ場所に保持します。
 
 M2安定化済みなら「続きから」でコア探索へ進めます。中継の入口から見える画面へ近づいて補給し、殻の墓場の奥へ潜ってください。[短い確認順路](docs/PLAYTEST.md) と [M3受入表](docs/M3_ACCEPTANCE.md) に詳しい操作と未確認事項を記載しています。
 
