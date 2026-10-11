@@ -49,7 +49,7 @@ func _run() -> void:
 	habitat.setup(host)
 	await physics_frame
 	await physics_frame
-	_check(Catalog.DATA.size() == 14, "fourteen_species_catalog")
+	_check(Catalog.DATA.size() == 15 and Catalog.DATA.has("kangaku"), "fifteen_species_catalog_with_kangaku")
 	_check(host.creatures.size() == 7 and habitat.soft_prey.size() == 4, "bounded_real_instances")
 	for animal: Node3D in habitat.animals:
 		var bounds := _model_bounds(animal.visual)
