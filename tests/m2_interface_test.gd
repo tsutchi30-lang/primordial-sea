@@ -129,7 +129,7 @@ func journal_at_720p() -> void:
 	game.pause_game("journal")
 	await frames(4)
 	var catalog: Dictionary = game.ecology.get_species_data()
-	check(catalog.size() == 14 and root.get_visible_rect().size == Vector2(1280, 720), "full catalog uses the actual 720p viewport")
+	check(catalog.size() == 15 and root.get_visible_rect().size == Vector2(1280, 720), "full catalog uses the actual 720p viewport")
 	check(root.get_visible_rect().encloses(game.hud.panel.get_global_rect()), "journal panel stays entirely inside the 720p viewport")
 	check(game.hud.scroll.get_v_scroll_bar().max_value > game.hud.scroll.size.y, "all species produce a genuinely scrollable menu")
 	var reached_end := false
@@ -254,7 +254,7 @@ func relay_guards() -> void:
 	section("relay distance / look direction / solid occlusion / stale menu / death guards")
 	game.resume_game()
 	freeze_player()
-	var relay: Vector3 = game.m2.relay_position()
+	var relay: Vector3 = game.m2.relay_anchor()
 	var previous := checkpoint_bytes()
 	var old_checkpoint: Dictionary = game.checkpoint.duplicate(true)
 	game.state.oxygen = 17

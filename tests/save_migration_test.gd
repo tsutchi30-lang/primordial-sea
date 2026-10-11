@@ -64,14 +64,14 @@ func migration_keeps_old_state() -> void:
 		var observations := read_bytes(store, "observations")
 		var settings := read_bytes(store, "settings")
 		var loaded: Dictionary = store.load_checkpoint()
-		check(loaded.get("schema_version") == 2 and store.loaded_schema_version == 1 and store.migration_pending, "load distinguishes migrated memory from original on-disk schema")
+		check(loaded.get("schema_version") == 3 and store.loaded_schema_version == 1 and store.migration_pending, "load distinguishes migrated memory from original on-disk schema")
 		check(read_bytes(store) == old_bytes and not FileAccess.file_exists(store.path(SaveStore.SCHEMA1_BACKUP)), "loading neither rewrites nor backs up the original file")
 		var state = Expedition.new()
 		state.restore(loaded)
 		check(state.nav == old.nav and state.stored_metal == old.stored_metal and state.buoys == old.buoys and state.tank_level == (1 if old.tank_upgraded else 0), "old navigation, million metal, tank stage and all buoys survive")
 		check(state.parts.values().count("world") == 2 and not state.stabilized and not state.cutter_upgraded and state.stored_fiber == 0 and state.stored_shell == 0, "only new M2 fields start empty")
 		check(store.save_checkpoint(state.checkpoint()), "first new checkpoint can commit migration")
-		check(read_bytes(store, SaveStore.SCHEMA1_BACKUP) == old_bytes and store.read_json("checkpoint").schema_version == 2, "migration backup preserves exact original bytes before schema2 replacement")
+		check(read_bytes(store, SaveStore.SCHEMA1_BACKUP) == old_bytes and store.read_json("checkpoint").schema_version == 3, "migration backup preserves exact original bytes before schema2 replacement")
 		state.stored_metal -= 1
 		check(store.save_checkpoint(state.checkpoint()) and read_bytes(store, SaveStore.SCHEMA1_BACKUP) == old_bytes and not store.migration_pending, "subsequent saves do not overwrite the one original backup")
 		check(read_bytes(store, "observations") == observations and read_bytes(store, "settings") == settings and store.load_settings().invert_y and store.load_observations().has("hogara"), "migration leaves settings and observations byte-for-byte independent")
@@ -100,12 +100,12 @@ func migration_failure_and_retry() -> void:
 	conflict.write_json(SaveStore.SCHEMA1_BACKUP, schema1("wreck", false))
 	var conflict_bytes := read_bytes(conflict)
 	var old_backup := read_bytes(conflict, SaveStore.SCHEMA1_BACKUP)
-	check(not conflict.save_checkpoint(conflict.load_checkpoint()) and read_bytes(conflict) == conflict_bytes and read_bytes(conflict, SaveStore.SCHEMA1_BACKUP) == old_backup, "a different existing backup is never silently overwritten")
+	check(conflict.save_checkpoint(conflict.load_checkpoint()) and read_bytes(conflict) != conflict_bytes and read_bytes(conflict, SaveStore.SCHEMA1_BACKUP) == old_backup, "a different existing backup is preserved and migration uses a distinct backup")
 
 func future_version_protection() -> void:
 	section("future schema stays intact even through explicit new-game save")
 	var store = store_for("future")
-	var future := {"schema_version": 3, "future_field": "keep exactly"}
+	var future := {"schema_version": 4, "future_field": "keep exactly"}
 	raw_fixture(store, future)
 	var original := read_bytes(store)
 	check(store.load_checkpoint().is_empty() and not store.last_error.is_empty(), "unknown future schema is rejected clearly")
@@ -163,7 +163,7 @@ func new_resource_and_recipe_limits() -> void:
 	check(state.upgrade("tank_ii") and state.capacity() == 780 and not state.upgrade("tank_ii"), "tank II installs once with the shared recipe")
 	check(state.upgrade("cutter") and state.cutter_seconds() == 0.6 and not state.upgrade("cutter"), "cutter improvement installs once and shortens the actual cut duration")
 	check(state.stabilize() and state.parts.values().count("installed") == 2 and not state.stabilize(), "stabilization installs both parts once without another resource recipe")
-	check("装置安定化編 完了" in state.objective(), "completion names the implemented chapter, not final return")
+	check("帰還コア" in state.objective() and not state.game_completed, "stabilization leads to core search without granting final return")
 
 func schema2_validation() -> void:
 	section("schema2 combinations / invalid materials / six shared-world buoys")
@@ -216,7 +216,7 @@ func schema2_validation() -> void:
 	bad = good.duplicate(true)
 	bad.buoys.append([0, -20, -50])
 	invalid.append(bad)
-	for point in [[0, -261, -300], [151, -70, -210], [0, -50, -461], [0, INF, 0], [0, "invalid", 0]]:
+	for point in [[0, -311, -300], [151, -70, -210], [0, -50, -593], [0, INF, 0], [0, "invalid", 0]]:
 		bad = good.duplicate(true)
 		bad.buoys = [point]
 		invalid.append(bad)

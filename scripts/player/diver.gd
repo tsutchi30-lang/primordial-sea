@@ -15,6 +15,7 @@ var base_fov := 80.0
 var camera_shake := 0.25
 var zoom_fov := 80.0
 var impulse := Vector3.ZERO
+var swim_intent := Vector3.ZERO
 var external_speed_scale := 1.0
 
 func _ready() -> void:
@@ -57,6 +58,7 @@ func _physics_process(delta: float) -> void:
 	else:
 		direction.y += Input.get_axis("descend", "ascend")
 	direction = direction.limit_length(1.0)
+	swim_intent = direction
 	sprinting = Input.is_action_pressed("sprint") and direction.length_squared() > 0.01
 	var speed := (4.5 if sprinting else 2.8) if not in_pod else 2.0
 	var desired := direction * speed * clampf(external_speed_scale, 0.1, 1.0)
@@ -85,6 +87,7 @@ func clear_input() -> void:
 	velocity = Vector3.ZERO
 	impulse = Vector3.ZERO
 	sprinting = false
+	swim_intent = Vector3.ZERO
 	zoom_fov = base_fov
 
 func relocate(at: Vector3, pod: bool) -> void:

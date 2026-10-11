@@ -1,10 +1,10 @@
 extends RefCounted
 ## Shared horizontal ranges, boundary flow, signals and authored swim corridors.
 ## POINTS / ROUTES store height above the local bed in y, not absolute depth.
-const MAP_MIN := Vector2(-150.0, -460.0)
+const MAP_MIN := Vector2(-150.0, -592.0)
 const MAP_MAX := Vector2(150.0, 60.0)
-const CAMERA_FAR := 620.0
-const BUOY_MIN_Y := -260.0
+const CAMERA_FAR := 760.0
+const BUOY_MIN_Y := -310.0
 const BUOY_MAX_Y := 10.0
 const WEB_LEARNING := Vector2(0, -189)
 const WEB_GRAZING := Vector2(-12, -216)
@@ -14,7 +14,8 @@ const BIOMES := {
 	"shallows": {"name": "目覚めの浅瀬", "min": Vector2(-150, -55), "max": MAP_MAX},
 	"corridor": {"name": "灯の回廊", "min": Vector2(-150, -175), "max": Vector2(150, -55)},
 	"milky_plain": {"name": "白濁の平原", "min": Vector2(-150, -298), "max": Vector2(150, -175)},
-	"shell_graveyard": {"name": "殻の墓場", "min": MAP_MIN, "max": Vector2(150, -298)}
+	"shell_graveyard": {"name": "殻の墓場", "min": Vector2(-150, -430), "max": Vector2(150, -298)},
+	"ring_rift": {"name": "環状の裂け目", "min": MAP_MIN, "max": Vector2(150, -430)}
 }
 const POINTS := {
 	"damping_frame": Vector3(-12, 1, -225),
@@ -39,7 +40,26 @@ const POINTS := {
 	"crawler_cleaner": Vector3(22.5, 0.4, -74),
 	"anomalocaris": Vector3(12, 4.5, -253)
 }
-const ABSOLUTE_POINTS := {"pod": Vector3(0, -2, -5), "nav": Vector3(0, -36, -130)}
+const ABSOLUTE_POINTS := {"pod": Vector3(0, -2, -5), "nav": Vector3(0, -36, -130),
+	"rift_shelf": Vector3(0, -244, -466),
+	"return_core": Vector3(24, -268.8, -502),
+	"rift_ship": Vector3(24, -270, -499),
+	"ship_entrance": Vector3(24, -268, -484),
+	"ship_exit": Vector3(32, -268, -508),
+	"rift_cover": Vector3(42, -266, -499)}
+# These routes are genuinely three-dimensional, including inside the wreck.
+# No floor-height interpolation may move them through its ceiling.
+const RIFT_ROUTES := {
+	"shelf_ship": [Vector3(0,-244,-466), Vector3(-2,-257,-478), Vector3(16,-268,-481), Vector3(24,-268,-483), Vector3(24,-268,-491), Vector3(24,-268.8,-500.2)],
+	"rift_detour": [Vector3(0,-244,-466), Vector3(-24,-252,-470), Vector3(-25,-265,-492), Vector3(-18,-267,-525), Vector3(35,-268,-526), Vector3(38,-268,-508), Vector3(28,-268,-508), Vector3(24,-268.8,-500.2)],
+	"core_exit": [Vector3(24,-268.8,-500.2), Vector3(25,-268,-508), Vector3(35,-268,-508), Vector3(42,-266,-499), Vector3(40,-252,-482), Vector3(25,-243,-472), Vector3(0,-244,-466)]
+}
+const RIFT_ACCESS := [Vector3(28,2,-275),Vector3(28,5,-269),Vector3(39,5,-268),Vector3(48,5,-296),Vector3(48,5,-335),Vector3(46,5,-388),Vector3(25,5,-416),Vector3(0,5,-438),Vector3(0,5,-443),Vector3(0,5,-448),Vector3(0,5,-453),Vector3(0,5,-458),Vector3(0,5,-462)]
+const RIFT_PATROL := [Vector3(-8,-253,-481), Vector3(18,-251,-470), Vector3(49,-251,-477), Vector3(51,-257,-530), Vector3(1,-261,-535), Vector3(-26,-255,-505)]
+const RIFT_RETREATS := [Vector3(-32,-248,-490), Vector3(62,-243,-534), Vector3(-12,-252,-544)]
+const CROSS_CURRENT_CENTER := Vector3(3,-258,-479)
+const CROSS_CURRENT_HALF := Vector3(28,14,5)
+
 const ROUTES := {
 	# Transit swimmers pass visibly above Hogara's moving shell; its original
 	# floor-level shelter encounter and all M1 scenery remain available below.
@@ -63,13 +83,22 @@ static func name_at(position: Vector3) -> String:
 	var id := id_at(position)
 	return "外縁の流れ" if id == "outside" else String(BIOMES[id].name)
 
-static func current_at(position: Vector3) -> Vector3:
+static func boundary_current(position: Vector3) -> Vector3:
 	var x := maxf(0.0, MAP_MIN.x + 12.0 - position.x) - maxf(0.0, position.x - MAP_MAX.x + 12.0)
 	var z := maxf(0.0, MAP_MIN.y + 14.0 - position.z) - maxf(0.0, position.z - MAP_MAX.y + 18.0)
 	return Vector3(x, 0, z) * 0.55
 
+static func cross_current(position: Vector3) -> Vector3:
+	var local := (position - CROSS_CURRENT_CENTER).abs() / CROSS_CURRENT_HALF
+	var edge := maxf(local.x, maxf(local.y, local.z))
+	return Vector3.RIGHT * 1.35 * (1.0 - smoothstep(0.6, 1.0, edge))
+
+static func current_at(position: Vector3) -> Vector3:
+	var boundary := boundary_current(position)
+	return boundary if boundary.length_squared() > 0.001 else cross_current(position)
+
 static func is_near_boundary(position: Vector3) -> bool:
-	return current_at(position).length_squared() > 0.12
+	return boundary_current(position).length_squared() > 0.12
 
 static func is_valid_buoy(position: Vector3) -> bool:
 	return position.is_finite() and position.x >= MAP_MIN.x and position.x <= MAP_MAX.x and position.z >= MAP_MIN.y and position.z <= MAP_MAX.y and position.y >= BUOY_MIN_Y and position.y <= BUOY_MAX_Y
@@ -82,6 +111,14 @@ static func point(id: String, world: Node3D) -> Vector3:
 
 static func route(id: String, world: Node3D) -> Array[Vector3]:
 	var result: Array[Vector3] = []
+	if id == "relay_rift":
+		for offset in RIFT_ACCESS:
+			result.append(Vector3(offset.x,world.floor_height(offset.x,offset.z)+offset.y,offset.z))
+		result.append(ABSOLUTE_POINTS.rift_shelf)
+		return result
+	if RIFT_ROUTES.has(id):
+		result.assign(RIFT_ROUTES[id])
+		return result
 	var offsets: Array = ROUTES.get(id, [])
 	for index in offsets.size():
 		var offset: Vector3 = offsets[index]

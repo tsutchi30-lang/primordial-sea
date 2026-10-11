@@ -9,6 +9,7 @@ var _shell: StandardMaterial3D
 var _dark_shell: StandardMaterial3D
 var _metal: StandardMaterial3D
 var _rust: StandardMaterial3D
+var relay_anchor: Marker3D
 
 static func bed_material() -> ShaderMaterial:
 	var shader := Shader.new()
@@ -87,6 +88,10 @@ func _relay() -> void:
 		world._box(at + Vector3(signf(x) * 0.68, 2.35, 3.81), Vector3(0.1, 3.9, 0.08), glow)
 	world._box(at + Vector3(1.9, 1.6, -2.8), Vector3(1.3, 2.5, 0.55), dark, true)
 	world._box(at + Vector3(1.9, 2.1, -2.49), Vector3(0.9, 0.68, 0.06), glow)
+	relay_anchor = Marker3D.new()
+	relay_anchor.name = "InteractionAnchor"
+	relay_anchor.position = at + Vector3(1.9, 2.1, -2.44)
+	add_child(relay_anchor)
 	for x in [-1.6, -0.75]:
 		var tank := CapsuleMesh.new()
 		tank.radius = 0.3
@@ -195,7 +200,8 @@ func _outer_reefs() -> void:
 		for side in [-1.0, 1.0]:
 			world._rock(_at(side * 144, z, 2), Vector3(7, 10, 12))
 	for x in range(-120, 121, 30):
-		world._rock(_at(x, -451, 2), Vector3(11, 11, 7))
+		if absi(x) >= 70:
+			world._rock(_at(x, -451, 2), Vector3(11, 11, 7))
 
 func _shell_scatter() -> void:
 	var source := PrismMesh.new()

@@ -10,7 +10,7 @@ const MAX_STORED := Items.MAX_STORED
 const MAX_STORED_METAL := MAX_STORED
 const MAX_BUOYS := Items.MAX_BUOYS
 const PART_IDS := Items.PART_IDS
-const RUNTIME_FIELDS := ["oxygen", "suit", "anoxia", "invulnerability", "carried_metal", "stored_metal", "carried_fiber", "stored_fiber", "carried_shell", "stored_shell", "bait", "pulse", "tank_level", "cutter_upgraded", "nav", "dead", "warned_35", "warned_15", "stabilized", "tracked_part"]
+const RUNTIME_FIELDS := ["oxygen", "suit", "anoxia", "invulnerability", "carried_metal", "stored_metal", "carried_fiber", "stored_fiber", "carried_shell", "stored_shell", "bait", "pulse", "tank_level", "cutter_upgraded", "nav", "dead", "warned_35", "warned_15", "stabilized", "tracked_part", "return_core", "game_completed"]
 var oxygen := BASE_OXYGEN
 var suit := 100.0
 var anoxia := 0.0
@@ -33,6 +33,8 @@ var nav := "wreck"
 var dead := false
 var parts: Dictionary = {"damping_frame": "world", "phase_regulator": "world"}
 var stabilized := false
+var return_core := "world"
+var game_completed := false
 var tracked_part := "damping_frame"
 var buoys: Array = []
 var warned_35 := false
@@ -94,6 +96,40 @@ func collect_nav() -> bool:
 	nav = "carried"
 	return true
 
+func collect_core() -> bool:
+	if dead or return_core != "world":
+		return false
+	return_core = "carried"
+	return true
+
+func repair_status() -> Dictionary:
+	var missing: Array[String] = []
+	if nav not in ["stored", "repaired"]:
+		missing.append("航法ユニットをポッドへ保管")
+	if nav != "repaired" and stored_metal < REPAIR_METAL:
+		missing.append("保管金属片 あと%d個" % (REPAIR_METAL - stored_metal))
+	var reason := "・".join(missing)
+	if dead: reason = "再出発後に整備してください。"
+	elif nav == "repaired": reason = "航法は復旧済みです。"
+	return {"allowed": reason.is_empty(), "reason": reason}
+
+func return_status() -> Dictionary:
+	var missing: Array[String] = []
+	if nav != "repaired": missing.append("航法機能の復旧")
+	if not stabilized: missing.append("装置の安定化")
+	if return_core not in ["stored", "installed"]: missing.append("帰還コアをポッドへ保管")
+	var reason := "・".join(missing)
+	if dead: reason = "再出発後に整備してください。"
+	elif game_completed: reason = "帰還達成済み。帰還直前の海を調査できます。"
+	return {"allowed": reason.is_empty(), "reason": reason}
+
+func complete_return() -> bool:
+	if not return_status().allowed:
+		return false
+	return_core = "installed"
+	game_completed = true
+	return true
+
 func collect_part(id: String) -> bool:
 	if dead or not Items.PARTS.has(id) or parts.get(id) != "world":
 		return false
@@ -139,11 +175,13 @@ func deposit() -> bool:
 	for id in PART_IDS:
 		if parts[id] == "carried":
 			parts[id] = "stored"
+	if return_core == "carried":
+		return_core = "stored"
 	refill()
 	return true
 
 func repair() -> bool:
-	if dead or nav != "stored" or stored_metal < REPAIR_METAL:
+	if not repair_status().allowed:
 		return false
 	stored_metal -= REPAIR_METAL
 	nav = "repaired"
@@ -239,7 +277,7 @@ func checkpoint() -> Dictionary:
 	for id in PART_IDS:
 		if banked_parts[id] == "carried":
 			banked_parts[id] = "world"
-	return {"schema_version": 2, "nav": nav if nav != "carried" else "wreck", "parts": banked_parts, "stabilized": stabilized, "stored_metal": stored_metal, "stored_fiber": stored_fiber, "stored_shell": stored_shell, "tank_level": tank_level, "cutter_upgraded": cutter_upgraded, "tracked_part": tracked_part, "buoys": buoys.duplicate(true)}
+	return {"schema_version": 3, "return_core": "world" if return_core == "carried" else return_core, "game_completed": game_completed, "nav": nav if nav != "carried" else "wreck", "parts": banked_parts, "stabilized": stabilized, "stored_metal": stored_metal, "stored_fiber": stored_fiber, "stored_shell": stored_shell, "tank_level": tank_level, "cutter_upgraded": cutter_upgraded, "tracked_part": tracked_part, "buoys": buoys.duplicate(true)}
 
 func restore(data: Dictionary) -> void:
 	nav = data.get("nav", "wreck")
@@ -250,6 +288,8 @@ func restore(data: Dictionary) -> void:
 	cutter_upgraded = data.get("cutter_upgraded", false)
 	parts = data.get("parts", {"damping_frame": "world", "phase_regulator": "world"}).duplicate(true)
 	stabilized = data.get("stabilized", false)
+	return_core = data.get("return_core", "world")
+	game_completed = data.get("game_completed", false)
 	tracked_part = data.get("tracked_part", "damping_frame")
 	buoys = data.get("buoys", []).duplicate(true)
 	carried_metal = 0
@@ -259,16 +299,22 @@ func restore(data: Dictionary) -> void:
 	refill()
 
 func objective() -> String:
+	if game_completed:
+		return "帰還達成済み — 帰還直前の海で調査を続ける"
 	if nav != "repaired":
 		if nav == "carried":
-			return "航法ユニットをポッドへ持ち帰る"
+			return "航法ユニットをポッドへ持ち帰り修理する（中継が利用可能に）"
 		if stored_metal + carried_metal < REPAIR_METAL:
 			return "浅瀬で修理用の金属片を集める（%d / %d）" % [stored_metal + carried_metal, REPAIR_METAL]
 		if nav == "stored":
 			return "ポッドの端末で航法装置を修理する"
 		return "艇の残骸から航法ユニットを回収する"
 	if stabilized:
-		return "装置安定化編 完了 — 海の観察を続ける"
+		if return_core == "carried":
+			return "帰還コアを救命ポッドへ持ち帰る（携行中・未保管）"
+		if return_core == "stored":
+			return "ポッドの端末で帰還装置を作動させる"
+		return "環状の裂け目の沈没調査艇から帰還コアを回収する"
 	if can_stabilize():
 		return "ポッドの端末で装置を安定化する"
 	var selected: String = tracked_part if Items.PARTS.has(tracked_part) else "damping_frame"

@@ -15,6 +15,7 @@ const PARTS := {
 }
 
 static func item_name(id: String) -> String:
+	if id == "return_core": return "帰還コア"
 	if RESOURCES.has(id):
 		return RESOURCES[id].name
 	if PARTS.has(id):

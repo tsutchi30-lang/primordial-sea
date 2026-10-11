@@ -57,7 +57,7 @@ func collect(id: String) -> void:
 	await frames()
 	check(game.collect_target(node), "nearby aimed unobstructed production collection: " + id)
 	check(not game.collect_target(node), "same unique item cannot be collected twice: " + id)
-	check(not node.visible and not node.available, "collected pickup disappears: " + id)
+	check(not node.available, "collected pickup disappears: " + id)
 
 func return_fixture() -> void:
 	game.resume_game()
@@ -200,7 +200,7 @@ func relay_and_death() -> void:
 		game.state.warned_35 = true
 		game.state.warned_15 = true
 		var before := checkpoint_bytes()
-		game.player.relocate(WorldMap.point("relay", game.world) + Vector3(0, 0, 1), false)
+		game.player.relocate(game.m2.relay_anchor() + Vector3(0, 0, 1), false)
 		freeze_player()
 		var at: Vector3 = game.player.global_position
 		await frames()

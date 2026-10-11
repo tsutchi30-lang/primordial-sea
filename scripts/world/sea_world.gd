@@ -10,6 +10,7 @@ const TERRAIN_STEP := 3.0
 const POD_ENTRY := Vector3(0, -2, -5)
 const WRECK_CENTER := Vector3(0, -39.2, -133)
 const EncounterDressing = preload("res://scripts/world/encounter_dressing.gd")
+const RiftDressing = preload("res://scripts/world/rift_dressing.gd")
 const M2Dressing = preload("res://scripts/world/m2_dressing.gd")
 
 var environment: Environment
@@ -29,6 +30,7 @@ var _last_underwater := false
 var _last_depth := -100.0
 var _last_biome := ""
 var m2_dressing: Node3D
+var rift_dressing: Node3D
 var visual_time := 0.0
 
 
@@ -62,6 +64,9 @@ func setup() -> void:
 	m2_dressing = M2Dressing.new()
 	add_child(m2_dressing)
 	m2_dressing.setup(self)
+	rift_dressing = RiftDressing.new()
+	add_child(rift_dressing)
+	rift_dressing.setup(self)
 
 
 func floor_height(x: float, z: float) -> float:
@@ -75,11 +80,13 @@ func floor_height(x: float, z: float) -> float:
 		bottom = -lerpf(101.0, 121.0, smoothstep(285.0, 315.0, distance))
 	if distance > 315.0:
 		bottom = -lerpf(121.0, 157.0, smoothstep(315.0, 430.0, distance))
+	if distance > 430.0:
+		bottom = -lerpf(157.0, 279.0, smoothstep(430.0, 484.0, distance))
 	bottom += sin(x * 0.057 + z * 0.044) * 0.8 + cos(z * 0.11) * 0.28
 	bottom += sin(x * 0.17) * sin(z * 0.09) * 0.22
 	# A broad shelf joins the unchanged M1 bed. The old southern ridge opens here.
 	bottom = lerpf(_m1_floor_height(x, -150.0), bottom, smoothstep(150.0, 170.0, distance))
-	var edge := maxf(smoothstep(125.0, MAP_MAX.x, absf(x)), smoothstep(430.0, -MAP_MIN.y, distance))
+	var edge := maxf(smoothstep(125.0, MAP_MAX.x, absf(x)), smoothstep(556.0, -MAP_MIN.y, distance))
 	return lerpf(bottom, bottom + 28.0 + sin(x * 0.1 + z * 0.08) * 2.0, edge)
 
 
@@ -120,6 +127,8 @@ func set_low_particles(low: bool) -> void:
 		_particles.amount = 45 if low else 140
 	if is_instance_valid(m2_dressing):
 		m2_dressing.set_low_particles(low)
+	if is_instance_valid(rift_dressing):
+		rift_dressing.set_low_particles(low)
 
 
 func set_stabilized(value: bool) -> void:
@@ -212,6 +221,13 @@ func _set_water_environment(underwater: bool, depth: float = 0.0, z: float = 0.0
 		environment.ambient_light_energy = lerpf(environment.ambient_light_energy, lerpf(0.34, 0.30, graveyard), plain)
 		if _sun != null:
 			_sun.light_energy = lerpf(_sun.light_energy, lerpf(0.38, 0.23, graveyard), plain)
+
+	if underwater and z < -430.0:
+		var rift := smoothstep(430.0, 463.0, -z)
+		environment.fog_density = lerpf(environment.fog_density, 0.010, rift)
+		environment.fog_light_color = environment.fog_light_color.lerp(Color("193c51"), rift)
+		environment.ambient_light_energy = lerpf(environment.ambient_light_energy, 0.39, rift)
+		if _fill != null: _fill.light_energy = lerpf(_fill.light_energy, 0.32, rift)
 
 
 func _build_seabed() -> void:

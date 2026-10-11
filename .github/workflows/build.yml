@@ -14,7 +14,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: windows-m2-${{ github.workflow }}-${{ github.ref }}
+  group: windows-m3-${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
 env:
@@ -27,7 +27,7 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 45
     steps:
-      # M2 evidence uses this checkout; the optional M1.5 comparison remains separate.
+      # M3 evidence uses this checkout; the optional M1.5 comparison remains separate.
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
         with:
           persist-credentials: false
@@ -40,7 +40,7 @@ jobs:
       - name: Windows development artifact
         uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
         with:
-          name: PRIMORDIAL_SEA_Windows_M2_${{ steps.identity.outputs.short_commit }}
+          name: PRIMORDIAL_SEA_Windows_M3_${{ steps.identity.outputs.short_commit }}
           path: build/windows/
           if-no-files-found: error
           retention-days: 7
@@ -49,14 +49,14 @@ jobs:
         run: |
           sudo apt-get update -qq
           sudo apt-get install -y --no-install-recommends xvfb xauth libgl1-mesa-dri mesa-utils ffmpeg python3-pil
-      - name: Capture M2 regions, ecology input replays and separate performance
-        run: tools/capture_m2.sh
+      - name: Capture M3 relay, predator, core and return input replays
+        run: tools/capture_m3.sh
       - name: Visual evidence and conditions
         if: always()
         uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
         with:
-          name: PRIMORDIAL_SEA_M2_Evidence_${{ steps.identity.outputs.short_commit }}
-          path: build/m2/
+          name: PRIMORDIAL_SEA_M3_Evidence_${{ steps.identity.outputs.short_commit }}
+          path: build/m3/
           if-no-files-found: error
           retention-days: 7
           compression-level: 1

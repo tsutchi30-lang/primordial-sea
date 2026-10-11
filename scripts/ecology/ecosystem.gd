@@ -10,6 +10,7 @@ const Silt = preload("res://scripts/ecology/silt_cloud.gd")
 const Art = preload("res://scripts/creatures/creature_mesh.gd")
 const Plains = preload("res://scripts/ecology/plains_ecology.gd")
 const Graveyard = preload("res://scripts/ecology/graveyard_ecology.gd")
+const Rift = preload("res://scripts/ecology/rift_ecology.gd")
 const Palaeo = preload("res://scripts/ecology/palaeo_ecology.gd")
 signal player_hit(amount: float)
 signal hint(text: String)
@@ -22,6 +23,7 @@ signal behavior_observed(creature: Node3D, event_id: String)
 var plains: Node3D
 var graveyard: Node3D
 var palaeo: Node3D
+var rift: Node3D
 var player: CharacterBody3D
 var world: Node3D
 var creatures: Array[Node3D] = []
@@ -69,6 +71,7 @@ func get_species_data() -> Dictionary:
 
 func set_low_particles(low: bool) -> void:
 	low_particles = low
+	if is_instance_valid(rift): rift.set_low_particles(low)
 	if is_instance_valid(hogara) and hogara.has_method("set_low_particles"):
 		hogara.set_low_particles(low)
 	for school in schools:
@@ -134,6 +137,9 @@ func _spawn() -> void:
 	palaeo = Palaeo.new()
 	add_child(palaeo)
 	palaeo.setup(self)
+	rift = Rift.new()
+	add_child(rift)
+	rift.setup(self)
 	set_low_particles(low_particles)
 
 func tick(delta: float) -> void:
@@ -169,6 +175,7 @@ func tick(delta: float) -> void:
 	player.external_speed_scale = plains.player_speed_scale()
 	graveyard.tick(delta)
 	palaeo.tick(delta)
+	rift.tick(delta)
 	for predator in predators:
 		predator.tick(delta)
 	for creature in creatures:

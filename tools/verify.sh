@@ -5,7 +5,7 @@ cd "$repo_root"
 mkdir -p build/logs build/m2/routes
 touch build/.gdignore
 rm -f build/logs/VERIFIED.txt
-for stage in import smoke hogara-gait save-migration m2-flow m2-interface plains-ecology graveyard-ecology palaeo-ecology m2-world pod-route m2-routes export; do
+for stage in import smoke hogara-gait save-migration m2-flow m2-interface plains-ecology graveyard-ecology palaeo-ecology m2-world pod-route m2-routes m3-save m3-flow m3-ecology m3-routes export; do
   rm -f "build/logs/$stage.log"
 done
 rm -f build/m2/routes/routes-manifest.json build/m2/routes/evidence.json
@@ -45,6 +45,12 @@ run_test plains-ecology 90 res://tests/plains_ecology_test.gd PLAINS_ECOLOGY_OK
 run_test graveyard-ecology 120 res://tests/graveyard_ecology_test.gd GRAVEYARD_ECOLOGY_OK
 run_test palaeo-ecology 90 res://tests/palaeo_ecology_test.gd PALAEO_OK
 run_test m2-world 120 res://tests/m2_world_test.gd M2_WORLD_OK
+run_test m3-save 60 res://tests/m3_save_test.gd M3_SAVE_OK
+run_test m3-flow 180 res://tests/m3_flow_test.gd M3_FLOW_OK
+run_checked m3-ecology 240 tools/godot.sh --headless --path "$repo_root" --fixed-fps 60 --script res://tests/m3_ecology_test.gd
+if ! grep -Eq '^M3_ECOLOGY_OK ' build/logs/m3-ecology.log; then exit 1; fi
+run_checked m3-routes 600 tools/godot.sh --headless --path "$repo_root" --fixed-fps 60 --script res://tests/m3_routes_test.gd
+if ! grep -Eq '^M3_ROUTES_OK ' build/logs/m3-routes.log; then exit 1; fi
 source_commit="${PRIMORDIAL_SOURCE_COMMIT:-$(git rev-parse HEAD 2>/dev/null || echo source-archive)}"
 run_checked pod-route 120 tools/godot.sh --headless --path "$repo_root" --fixed-fps 60 --script res://tools/capture_encounter.gd -- --mode pod-route --output "$repo_root/build/m1-5/reach" --source-commit "$source_commit"
 if ! grep -Eq '^REPLAY_OK ' build/logs/pod-route.log; then
@@ -57,9 +63,9 @@ if ! grep -Eq '^M2_ROUTES_OK ' build/logs/m2-routes.log; then
 fi
 python3 tools/write_evidence_manifest.py "$repo_root/build/m2/routes"
 {
-  echo "IMPORT_M1_GAIT_M2_SAVE_FLOW_ECOLOGY_AND_ROUTES_OK"
+  echo "IMPORT_M1_M2_M3_SAVE_FLOW_ECOLOGY_AND_ROUTES_OK"
   date -u '+UTC=%Y-%m-%dT%H:%M:%SZ'
   tools/godot.sh --version
   echo 'Windows hardware/audio/manual controls remain separate checks; see docs/PLAYTEST.md.'
 } > build/logs/VERIFIED.txt
-echo 'VERIFY_OK: import, M1 gameplay/gait, M2 saves/flow/ecology and live input routes; logs in build/logs/'
+echo 'VERIFY_OK: import, M1 gameplay/gait, M2/M3 saves/flow/ecology and live input routes; logs in build/logs/'

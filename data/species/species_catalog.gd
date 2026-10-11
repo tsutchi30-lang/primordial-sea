@@ -132,5 +132,15 @@ const DATA: Dictionary = {
 		"events": {"prey_captured": "小生物へ泳いで近づき、前方の付属肢で捕らえた。捕食対象はゲーム独自の設定で、史実の食性を断定しない。"},
 		"appearance": {"colour": "赤銅の体・淡い遊泳葉・暗い眼", "length_m": 0.90, "model_scale_m": 0.80, "soft_prey_max": 4, "prey_regrow_s": 45.0}, "max_count": 1, "update_hz": 30, "distant_update_hz": 2,
 		"reference_url": "https://burgess-shale.rom.on.ca/fossils/anomalocaris-canadensis/"
+	},
+	"kangaku": {
+		"name": "環顎〈カンガク〉", "origin": "オリジナル種", "habitat": "環状の裂け目", "size": "全長 約10.4m",
+		"description": "硬い外面と柔らかな内面を持つ帯状の捕食者。前半身を輪に曲げ、内側の櫛状の歯列で小生物を捕らえる。",
+		"morphology": "連続する帯状の体・内側の歯列・後方の遊泳葉", "states": ["patrol","forage","attention","windup","dash","recover","search","retreat"],
+		"senses": {"normal_m":8.0,"sprint_m":16.0,"occlusion":true,"encounter_s":18.0,"dash_limit":2,"reacquire_s":10.0},
+		"warning": "輪を作り、歯列を揃えて進路を固定する。横や上下へ泳ぎ、岩柱の陰へ。", "attack": {"damage":35,"windup_s":1.6,"locked_s":0.7,"speed_m_s":9.0,"recover_s":4.0},
+		"relationships": "灯粒虫の群れを狙う。横流れは人にも環顎にも作用する。小さな誘餌とパルスには反応しない。",
+		"events": {"windup":"前半身を輪に曲げ、歯列を向けている。", "locked":"歯列が揃った後は突進の方向を変えない。", "prey_captured":"実際の群れを捕食し、灯りの密度が減った。", "recover":"突進後は約4秒、体をほどいて回復する。", "retreat":"長く追い続けず、出入口から離れた場所へ戻った。"},
+		"appearance": {"length_m":10.4,"colour":"青灰の外殻・骨色の歯・砂色の内面"},"max_count":1,"update_hz":60,"distant_visual_hz":5
 	}
 }

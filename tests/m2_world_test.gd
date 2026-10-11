@@ -66,7 +66,7 @@ func legacy_and_boundaries() -> void:
 	check(legacy_ok, "M1 terrain, shelter route and wreck floor keep their captured heights")
 	check(absf(world.floor_height(0, -150.01) - world.floor_height(0, -149.99)) < 0.04, "old southern boundary joins continuously")
 	check(Map.current_at(Vector3(0, -60, -180)) == Vector3.ZERO and Map.current_at(Vector3(25, -140, -365)) == Vector3.ZERO, "old southern boundary does not push back M2 swimmers")
-	check(Map.current_at(Vector3(148, -40, -220)).x < 0 and Map.current_at(Vector3(-148, -80, -455)).z > 0, "new boundary flow points into the expanded map")
+	check(Map.current_at(Vector3(148, -40, -220)).x < 0 and Map.current_at(Vector3(-148, -80, Map.MAP_MIN.y + 5)).z > 0, "new boundary flow points into the expanded map")
 	check(Map.name_at(Vector3(0, -65, -195)) == "白濁の平原" and Map.name_at(Vector3(25, -140, -365)) == "殻の墓場", "shared biome ranges identify both new areas")
 	check(Map.is_valid_buoy(Vector3(25, -180, -430)) and not Map.is_valid_buoy(Vector3(151, -50, -200)) and not Map.is_valid_buoy(Vector3(INF, 0, 0)), "buoy validation includes new regions and rejects invalid coordinates")
 	var water := world.get_node("BreathableWaterSurface") as MeshInstance3D
